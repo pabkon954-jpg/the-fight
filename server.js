@@ -46,7 +46,6 @@ io.on("connection", (socket) => {
 
         socket.emit("roomCreated", roomCode);
 
-        // 즉시 동기화
         io.to(roomCode).emit("players", rooms[roomCode].players);
         io.to(roomCode).emit("hpUpdate", rooms[roomCode].hp);
     });
@@ -76,18 +75,14 @@ io.on("connection", (socket) => {
     });
 
     // ======================
-    // 이동 (🔥 핵심 수정)
+    // 이동 (데이터만 저장)
     // ======================
     socket.on("move", (data) => {
 
         const room = rooms[socket.roomCode];
         if (!room) return;
-        if (!room.players[socket.id]) return;
 
         room.players[socket.id] = data;
-
-        // 🔥 즉시 반영 (이거 없으면 "안 움직이는 것처럼 보임")
-        io.to(socket.roomCode).emit("players", room.players);
     });
 
     // ======================
@@ -112,7 +107,7 @@ io.on("connection", (socket) => {
     });
 
     // ======================
-    // 나가기
+    // disconnect
     // ======================
     socket.on("disconnect", () => {
 
@@ -124,7 +119,6 @@ io.on("connection", (socket) => {
         delete room.players[socket.id];
         delete room.hp[socket.id];
 
-        // 방 비었으면 삭제
         if (Object.keys(room.players).length === 0) {
             delete rooms[roomCode];
             return;
@@ -137,7 +131,7 @@ io.on("connection", (socket) => {
 });
 
 // ======================
-// 게임 루프 (총알/충돌)
+// 게임 루프 (핵심 동기화)
 // ======================
 setInterval(() => {
 
@@ -145,6 +139,9 @@ setInterval(() => {
 
         const room = rooms[roomCode];
 
+        // ======================
+        // 총알 이동 + 충돌
+        // ======================
         for (const bulletId in room.bullets) {
 
             const b = room.bullets[bulletId];
@@ -169,13 +166,10 @@ setInterval(() => {
                 if (dist < 20) {
 
                     room.hp[pid] -= 10;
-
                     delete room.bullets[bulletId];
 
                     if (room.hp[pid] <= 0) {
-
                         io.to(pid).emit("dead");
-
                         delete room.players[pid];
                         delete room.hp[pid];
                     }
@@ -184,6 +178,7 @@ setInterval(() => {
                 }
             }
 
+            // 화면 밖 제거
             if (
                 b.x < -200 || b.x > 5000 ||
                 b.y < -200 || b.y > 5000
@@ -192,10 +187,14 @@ setInterval(() => {
             }
         }
 
+        // ======================
+        // 🔥 핵심: 여기서만 동기화
+        // ======================
+        io.to(roomCode).emit("players", room.players);
         io.to(roomCode).emit("hpUpdate", room.hp);
     }
 
-}, 16);
+}, 50); // 🔥 20fps (안정 핵심)
 
 // ======================
 const PORT = process.env.PORT || 3000;
