@@ -90,8 +90,11 @@ io.on("connection", (socket) => {
             vy: data.vy
         };
 
-        // 🔥 전체에게 총알 보여주기 (중요)
-        io.to(socket.roomCode).emit("shoot", data);
+        // 🔥 핵심: "전체 총알 동기화"
+        io.to(socket.roomCode).emit("shoot", {
+            id,
+            ...room.bullets[id]
+        });
     });
 
     // ================= DISCONNECT =================
@@ -114,6 +117,8 @@ io.on("connection", (socket) => {
     });
 });
 
+
+// ================= GAME LOOP =================
 setInterval(() => {
 
     for (const code in rooms) {
@@ -141,13 +146,11 @@ setInterval(() => {
                 if (dist < 20) {
 
                     room.hp[pid] -= 10;
+
                     delete room.bullets[bid];
 
                     if (room.hp[pid] <= 0) {
-
-                        // 🔥 1명만 죽게
                         io.to(pid).emit("dead");
-
                         delete room.players[pid];
                         delete room.hp[pid];
                     }

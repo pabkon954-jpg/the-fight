@@ -46,6 +46,7 @@ document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 // ================= LOOP =================
 function loop() {
     requestAnimationFrame(loop);
+
     if (!joinedRoom || dead) return;
 
     if (keys["w"]) y -= speed;
@@ -66,6 +67,8 @@ loop();
 // ================= BULLET =================
 function createBullet(id, sx, sy, tx, ty, color) {
 
+    if (bullets[id]) return;
+
     const bullet = document.createElement("div");
     bullet.style.width = "10px";
     bullet.style.height = "10px";
@@ -77,19 +80,19 @@ function createBullet(id, sx, sy, tx, ty, color) {
 
     const dx = tx - sx;
     const dy = ty - sy;
-    const len = Math.sqrt(dx * dx + dy * dy);
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
 
     const vx = (dx / len) * 10;
     const vy = (dy / len) * 10;
 
     bullets[id] = bullet;
 
+    let bx = sx;
+    let by = sy;
+
     function move() {
 
-        if (!bullets[id]) return;
-
-        let bx = parseFloat(bullet.style.left || sx);
-        let by = parseFloat(bullet.style.top || sy);
+        if (!bullets[id] || dead) return;
 
         bx += vx;
         by += vy;
@@ -123,22 +126,28 @@ document.addEventListener("click", (e) => {
     const dx = e.clientX - sx;
     const dy = e.clientY - sy;
 
-    const id = Date.now() + "_" + socket.id;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    const id = socket.id + "_" + Date.now();
 
     createBullet(id, sx, sy, e.clientX, e.clientY, "yellow");
 
     socket.emit("shoot", {
+        id,
         startX: sx,
         startY: sy,
-        vx: (dx / Math.sqrt(dx*dx + dy*dy)) * 10,
-        vy: (dy / Math.sqrt(dx*dx + dy*dy)) * 10
+        vx: (dx / len) * 10,
+        vy: (dy / len) * 10
     });
 });
 
-// ================= PLAYERS =================
+// ================= OTHER PLAYERS =================
 socket.on("players", players => {
 
+    if (!joinedRoom || dead) return;
+
     for (const id in players) {
+
         if (id === socket.id) continue;
 
         if (!otherPlayers[id]) {
@@ -167,7 +176,7 @@ socket.on("players", players => {
 // ================= HP =================
 socket.on("hpUpdate", hpData => {
 
-    if (dead) return;
+    if (!joinedRoom || dead) return;
 
     if (hpData[socket.id] !== undefined) {
         myHp = hpData[socket.id];
@@ -202,6 +211,8 @@ socket.on("hpUpdate", hpData => {
 // ================= ROOM =================
 function enterRoom(code) {
     joinedRoom = true;
+    dead = false;
+
     menu.style.display = "none";
     roomTop.innerText = "ROOM: " + code;
 }
@@ -221,12 +232,24 @@ socket.on("dead", () => {
 
     if (dead) return;
     dead = true;
+    joinedRoom = false; // ⭐ 핵심: 업데이트 완전 차단
 
     myHpBar.remove();
 
-    for (const id in hpBars) hpBars[id].remove();
-    for (const id in otherPlayers) otherPlayers[id].remove();
-    for (const id in bullets) bullets[id].remove();
+    for (const id in hpBars) {
+        hpBars[id].remove();
+        delete hpBars[id];
+    }
+
+    for (const id in otherPlayers) {
+        otherPlayers[id].remove();
+        delete otherPlayers[id];
+    }
+
+    for (const id in bullets) {
+        bullets[id].remove();
+        delete bullets[id];
+    }
 
     const screen = document.createElement("div");
     screen.style.position = "fixed";
