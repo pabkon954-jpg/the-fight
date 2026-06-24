@@ -164,7 +164,7 @@ setInterval(() => {
         io.to(code).emit("hpUpdate", room.hp);
     }
  
-}, 50);
+}, 16);
  
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => console.log("Server running on " + PORT));
