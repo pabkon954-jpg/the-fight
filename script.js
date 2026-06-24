@@ -1,5 +1,18 @@
 const player = document.getElementById("player");
 const socket = io();
+const createRoomBtn =
+    document.getElementById("createRoomBtn");
+
+const joinRoomBtn =
+    document.getElementById("joinRoomBtn");
+
+const roomInput =
+    document.getElementById("roomInput");
+
+const roomInfo =
+    document.getElementById("roomInfo");
+
+let joinedRoom = false;
 
 console.log("SCRIPT VERSION FINAL");
 
@@ -293,4 +306,70 @@ socket.on("dead", () => {
         .addEventListener("click", () => {
             location.reload();
         });
+});
+// ======================
+// 방 생성
+// ======================
+
+createRoomBtn.addEventListener("click", () => {
+
+    socket.emit("createRoom");
+
+});
+
+// ======================
+// 방 참가
+// ======================
+
+joinRoomBtn.addEventListener("click", () => {
+
+    const roomCode =
+        roomInput.value.trim();
+
+    if (!roomCode) return;
+
+    socket.emit("joinRoom", roomCode);
+
+});
+
+// ======================
+// 방 생성 성공
+// ======================
+
+socket.on("roomCreated", (roomCode) => {
+
+    joinedRoom = true;
+
+    roomInfo.innerHTML =
+        "내 방 번호 : " + roomCode;
+
+    document.getElementById("menu")
+        .style.display = "none";
+
+});
+
+// ======================
+// 방 참가 성공
+// ======================
+
+socket.on("roomJoined", (roomCode) => {
+
+    joinedRoom = true;
+
+    roomInfo.innerHTML =
+        "참가한 방 : " + roomCode;
+
+    document.getElementById("menu")
+        .style.display = "none";
+
+});
+
+// ======================
+// 방 없음
+// ======================
+
+socket.on("roomNotFound", () => {
+
+    alert("방을 찾을 수 없음");
+
 });

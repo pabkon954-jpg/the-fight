@@ -2,37 +2,108 @@ const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
+const createRoomBtn =
+    document.getElementById("createRoomBtn");
+
+const joinRoomBtn =
+    document.getElementById("joinRoomBtn");
+
+const roomInput =
+    document.getElementById("roomInput");
+
+const roomInfo =
+    document.getElementById("roomInfo");
+
+let joinedRoom = false;
 
 app.use(express.static(__dirname));
 
-const players = {};
-const bullets = {};
-const HP = {};
+const rooms = {};
 
-const MAX_HP = 100;
+function createRoomCode() {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+}
 
-// ======================
-// 플레이어 연결
-// ======================
 io.on("connection", (socket) => {
 
-    players[socket.id] = { x: 100, y: 100 };
-    HP[socket.id] = MAX_HP;
+    socket.roomCode = null;
 
-    socket.emit("hpUpdate", HP);
-    io.emit("players", players);
+    // 방 생성
+    socket.on("createRoom", () => {
+
+        let roomCode;
+
+        do {
+            roomCode = createRoomCode();
+        } while (rooms[roomCode]);
+
+        rooms[roomCode] = {
+            players: {},
+            hp: {},
+            bullets: {}
+        };
+
+        socket.join(roomCode);
+        socket.roomCode = roomCode;
+
+        rooms[roomCode].players[socket.id] = {
+            x: 100,
+            y: 100
+        };
+
+        rooms[roomCode].hp[socket.id] = 100;
+
+        socket.emit("roomCreated", roomCode);
+    });
+
+    // 방 참가
+    socket.on("joinRoom", (roomCode) => {
+
+        if (!rooms[roomCode]) {
+            socket.emit("roomNotFound");
+            return;
+        }
+
+        socket.join(roomCode);
+        socket.roomCode = roomCode;
+
+        rooms[roomCode].players[socket.id] = {
+            x: 100,
+            y: 100
+        };
+
+        rooms[roomCode].hp[socket.id] = 100;
+
+        io.to(roomCode).emit(
+            "players",
+            rooms[roomCode].players
+        );
+
+        io.to(roomCode).emit(
+            "hpUpdate",
+            rooms[roomCode].hp
+        );
+    });
 
     // 이동
     socket.on("move", (data) => {
-        players[socket.id] = data;
+
+        const room = rooms[socket.roomCode];
+        if (!room) return;
+
+        room.players[socket.id] = data;
     });
 
-    // 발사
+    // 총알
     socket.on("shoot", (data) => {
 
-        const bulletId = socket.id + "_" + Date.now();
+        const room = rooms[socket.roomCode];
+        if (!room) return;
 
-        bullets[bulletId] = {
+        const bulletId =
+            socket.id + "_" + Date.now();
+
+        room.bullets[bulletId] = {
             owner: socket.id,
             x: data.startX,
             y: data.startY,
@@ -40,87 +111,94 @@ io.on("connection", (socket) => {
             vy: data.vy
         };
 
-        socket.broadcast.emit("shoot", data);
+        socket.to(socket.roomCode)
+            .emit("shoot", data);
     });
 
     // 나가기
     socket.on("disconnect", () => {
-        delete players[socket.id];
-        delete HP[socket.id];
 
-        io.emit("players", players);
-        io.emit("hpUpdate", HP);
+        const room = rooms[socket.roomCode];
+
+        if (!room) return;
+
+        delete room.players[socket.id];
+        delete room.hp[socket.id];
+
+        io.to(socket.roomCode)
+            .emit("players", room.players);
+
+        io.to(socket.roomCode)
+            .emit("hpUpdate", room.hp);
     });
+
 });
 
-
-// ======================
-// 게임 루프 (핵심)
-// ======================
+// 게임 루프
 setInterval(() => {
 
-    for (const id in bullets) {
+    for (const roomCode in rooms) {
 
-        const b = bullets[id];
+        const room = rooms[roomCode];
 
-        b.x += b.vx;
-        b.y += b.vy;
+        for (const bulletId in room.bullets) {
 
-        for (const pid in players) {
+            const b = room.bullets[bulletId];
 
-            if (pid === b.owner) continue;
+            b.x += b.vx;
+            b.y += b.vy;
 
-            const p = players[pid];
+            for (const pid in room.players) {
 
-            // 플레이어 중심 보정
-            const px = p.x + 25;
-            const py = p.y + 25;
+                if (pid === b.owner) continue;
 
-            const dx = px - b.x;
-            const dy = py - b.y;
+                const p = room.players[pid];
 
-            const dist = Math.sqrt(dx * dx + dy * dy);
+                const px = p.x + 25;
+                const py = p.y + 25;
 
-            if (dist < 20) {
+                const dx = px - b.x;
+                const dy = py - b.y;
 
-                HP[pid] -= 10;
+                const dist =
+                    Math.sqrt(dx * dx + dy * dy);
 
-                delete bullets[id];
+                if (dist < 20) {
 
-                // 죽음 처리
-            if (HP[pid] <= 0) {
+                    room.hp[pid] -= 10;
 
-             io.to(pid).emit("dead");
+                    delete room.bullets[bulletId];
 
-             HP[pid] = 0;
+                    if (room.hp[pid] <= 0) {
 
-             delete players[pid];
-             delete HP[pid];
-}
-                break;
+                        io.to(pid).emit("dead");
+
+                        delete room.players[pid];
+                        delete room.hp[pid];
+                    }
+
+                    break;
+                }
             }
         }
 
-        // 화면 밖 제거
-        if (
-            b.x < -100 || b.x > 3000 ||
-            b.y < -100 || b.y > 3000
-        ) {
-            delete bullets[id];
-        }
-    }
+        io.to(roomCode).emit(
+            "players",
+            room.players
+        );
 
-    io.emit("players", players);
-    io.emit("hpUpdate", HP);
+        io.to(roomCode).emit(
+            "hpUpdate",
+            room.hp
+        );
+    }
 
 }, 16);
 
-
-// ======================
-// 서버 시작 (Render 필수)
-// ======================
 const PORT = process.env.PORT || 3000;
 
 http.listen(PORT, () => {
-    console.log("Server running on port " + PORT);
+    console.log(
+        "Server running on port " + PORT
+    );
 });

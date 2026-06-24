@@ -1,18 +1,42 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
     <title>My IO Game</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div id="player"></div>
+    <!-- 방 메뉴 -->
+    <div id="menu">
 
-    <div id="enemyHpBar">
-        <div id="enemyHpFill"></div>
+        <h2>My IO Game</h2>
+
+        <button id="createRoomBtn">
+            방 만들기
+        </button>
+
+        <br><br>
+
+        <input
+            id="roomInput"
+            placeholder="방 번호 입력"
+        >
+
+        <button id="joinRoomBtn">
+            방 참가
+        </button>
+
+        <br><br>
+
+        <div id="roomInfo">
+            방 없음
+        </div>
+
     </div>
 
-    <div id="enemy"></div>
+    <!-- 게임 플레이어 -->
+    <div id="player"></div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
