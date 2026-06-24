@@ -5,14 +5,23 @@ const createRoomBtn = document.getElementById("createRoomBtn");
 const joinRoomBtn = document.getElementById("joinRoomBtn");
 const roomInput = document.getElementById("roomInput");
 const roomInfo = document.getElementById("roomInfo");
+const menu = document.getElementById("menu");
+
+// ================= ROOM UI =================
+const roomTop = document.createElement("div");
+roomTop.style.position = "absolute";
+roomTop.style.top = "10px";
+roomTop.style.left = "10px";
+roomTop.style.color = "white";
+roomTop.style.fontSize = "20px";
+document.body.appendChild(roomTop);
 
 let joinedRoom = false;
+let dead = false;
 
 let x = 100;
 let y = 100;
 const speed = 5;
-
-let dead = false;
 
 const keys = {};
 const otherPlayers = {};
@@ -20,7 +29,7 @@ const hpBars = {};
 
 let myHp = 100;
 
-// HP bar
+// ================= HP BAR =================
 const myHpBar = document.createElement("div");
 myHpBar.style.width = "50px";
 myHpBar.style.height = "6px";
@@ -29,17 +38,22 @@ myHpBar.style.position = "absolute";
 myHpBar.style.borderRadius = "3px";
 document.body.appendChild(myHpBar);
 
-// ================= KEY =================
-document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
-document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
+// ================= INPUT =================
+document.addEventListener("keydown", (e) => {
+    keys[e.key.toLowerCase()] = true;
+});
 
-// ================= MOVE =================
+document.addEventListener("keyup", (e) => {
+    keys[e.key.toLowerCase()] = false;
+});
+
+// ================= GAME LOOP =================
 function gameLoop() {
+
     if (dead) return;
-    if (!joinedRoom) {
-        requestAnimationFrame(gameLoop);
-        return;
-    }
+    requestAnimationFrame(gameLoop);
+
+    if (!joinedRoom) return;
 
     if (keys["w"]) y -= speed;
     if (keys["s"]) y += speed;
@@ -53,13 +67,12 @@ function gameLoop() {
     myHpBar.style.top = (y - 12) + "px";
 
     socket.emit("move", { x, y });
-
-    requestAnimationFrame(gameLoop);
 }
 gameLoop();
 
 // ================= BULLET =================
 function createBullet(sx, sy, tx, ty, color) {
+
     const bullet = document.createElement("div");
 
     bullet.style.width = "10px";
@@ -106,6 +119,7 @@ function createBullet(sx, sy, tx, ty, color) {
 
 // ================= SHOOT =================
 document.addEventListener("click", (e) => {
+
     if (!joinedRoom || dead) return;
 
     const sx = x + 25;
@@ -133,6 +147,7 @@ document.addEventListener("click", (e) => {
 socket.on("players", (players) => {
 
     for (const id in players) {
+
         if (id === socket.id) continue;
 
         if (!otherPlayers[id]) {
@@ -162,6 +177,7 @@ socket.on("players", (players) => {
 
 // ================= HP =================
 socket.on("hpUpdate", (hpData) => {
+
     if (hpData[socket.id] !== undefined) {
         myHp = hpData[socket.id];
         myHpBar.style.width = ((myHp / 100) * 50) + "px";
@@ -169,6 +185,13 @@ socket.on("hpUpdate", (hpData) => {
 });
 
 // ================= ROOM =================
+function enterRoomUI(code) {
+    joinedRoom = true;
+
+    menu.style.display = "none"; // 🔥 핵심
+    roomTop.innerText = "ROOM: " + code;
+}
+
 createRoomBtn.addEventListener("click", () => {
     socket.emit("createRoom");
 });
@@ -180,19 +203,51 @@ joinRoomBtn.addEventListener("click", () => {
     socket.emit("joinRoom", code);
 });
 
-// 방 생성 성공
+// ================= ROOM EVENTS =================
 socket.on("roomCreated", (code) => {
-    joinedRoom = true;
-    roomInfo.innerHTML = "방 생성됨: " + code;
+    enterRoomUI(code);
 });
 
-// 방 참가 성공
 socket.on("roomJoined", (code) => {
-    joinedRoom = true;
-    roomInfo.innerHTML = "입장: " + code;
+    enterRoomUI(code);
 });
 
-// 실패
 socket.on("roomNotFound", () => {
     alert("방 없음");
+});
+
+// ================= DEAD =================
+socket.on("dead", () => {
+
+    if (dead) return;
+    dead = true;
+
+    myHpBar.style.display = "none";
+
+    const screen = document.createElement("div");
+    screen.style.position = "fixed";
+    screen.style.top = "0";
+    screen.style.left = "0";
+    screen.style.width = "100%";
+    screen.style.height = "100%";
+    screen.style.background = "rgba(0,0,0,0.9)";
+    screen.style.color = "white";
+    screen.style.display = "flex";
+    screen.style.justifyContent = "center";
+    screen.style.alignItems = "center";
+    screen.style.flexDirection = "column";
+    screen.style.fontSize = "40px";
+
+    screen.innerHTML = `
+        <div>YOU DIED</div>
+        <button id="respawnBtn" style="margin-top:20px;font-size:20px;padding:10px;">
+            Respawn
+        </button>
+    `;
+
+    document.body.appendChild(screen);
+
+    document.getElementById("respawnBtn").onclick = () => {
+        location.reload();
+    };
 });
