@@ -27,9 +27,9 @@ const keys = {};
 const otherPlayers = {};
 const hpBars = {};
 
+// ================= MY HP =================
 let myHp = 100;
 
-// ================= HP BAR =================
 const myHpBar = document.createElement("div");
 myHpBar.style.width = "50px";
 myHpBar.style.height = "6px";
@@ -39,20 +39,13 @@ myHpBar.style.borderRadius = "3px";
 document.body.appendChild(myHpBar);
 
 // ================= INPUT =================
-document.addEventListener("keydown", (e) => {
-    keys[e.key.toLowerCase()] = true;
-});
-
-document.addEventListener("keyup", (e) => {
-    keys[e.key.toLowerCase()] = false;
-});
+document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
 
 // ================= GAME LOOP =================
 function gameLoop() {
-
     requestAnimationFrame(gameLoop);
-
-    if (dead || !joinedRoom) return;
+    if (!joinedRoom || dead) return;
 
     if (keys["w"]) y -= speed;
     if (keys["s"]) y += speed;
@@ -71,7 +64,6 @@ gameLoop();
 
 // ================= BULLET =================
 function createBullet(sx, sy, tx, ty, color) {
-
     const bullet = document.createElement("div");
 
     bullet.style.width = "10px";
@@ -118,7 +110,6 @@ function createBullet(sx, sy, tx, ty, color) {
 
 // ================= SHOOT =================
 document.addEventListener("click", (e) => {
-
     if (!joinedRoom || dead) return;
 
     const sx = x + 25;
@@ -146,18 +137,15 @@ document.addEventListener("click", (e) => {
 socket.on("players", (players) => {
 
     for (const id in players) {
-
         if (id === socket.id) continue;
 
         if (!otherPlayers[id]) {
             const div = document.createElement("div");
-
             div.style.width = "50px";
             div.style.height = "50px";
             div.style.background = "lime";
             div.style.borderRadius = "50%";
             div.style.position = "absolute";
-
             document.body.appendChild(div);
             otherPlayers[id] = div;
         }
@@ -177,114 +165,80 @@ socket.on("players", (players) => {
 // ================= HP =================
 socket.on("hpUpdate", (hpData) => {
 
-    // 내 체력
+    if (dead) return;
+
+    // 내 HP
     if (hpData[socket.id] !== undefined) {
         myHp = hpData[socket.id];
-        myHpBar.style.width = ((myHp / 100) * 50) + "px";
+        myHpBar.style.width = (myHp / 100) * 50 + "px";
     }
 
-    // 🔥 상대 HP 추가
+    // 상대 HP
     for (const id in hpData) {
-
         if (id === socket.id) continue;
 
         if (!hpBars[id]) {
             const bar = document.createElement("div");
-
             bar.style.width = "50px";
             bar.style.height = "6px";
             bar.style.background = "red";
             bar.style.position = "absolute";
             bar.style.borderRadius = "3px";
-
             document.body.appendChild(bar);
             hpBars[id] = bar;
         }
 
-        hpBars[id].style.width =
-            ((hpData[id] / 100) * 50) + "px";
+        hpBars[id].style.width = (hpData[id] / 100) * 50 + "px";
 
         if (otherPlayers[id]) {
             hpBars[id].style.left = otherPlayers[id].style.left;
-            hpBars[id].style.top =
-                (parseInt(otherPlayers[id].style.top) - 12) + "px";
+            hpBars[id].style.top = (parseInt(otherPlayers[id].style.top) - 12) + "px";
         }
     }
 });
 
 // ================= ROOM =================
 function enterRoomUI(code) {
-
     joinedRoom = true;
-
     menu.style.display = "none";
     roomTop.innerText = "ROOM: " + code;
 }
 
-createRoomBtn.addEventListener("click", () => {
-    socket.emit("createRoom");
-});
-
-joinRoomBtn.addEventListener("click", () => {
+createRoomBtn.onclick = () => socket.emit("createRoom");
+joinRoomBtn.onclick = () => {
     const code = roomInput.value.trim();
     if (!code) return;
-
     socket.emit("joinRoom", code);
-});
+};
 
-// ================= EVENTS =================
-socket.on("roomCreated", (code) => {
-    enterRoomUI(code);
-});
+socket.on("roomCreated", enterRoomUI);
+socket.on("roomJoined", enterRoomUI);
 
-socket.on("roomJoined", (code) => {
-    enterRoomUI(code);
-});
-
-socket.on("roomNotFound", () => {
-    alert("방 없음");
-});
-
-// ================= DEAD =================
+// ================= DEAD (핵심 수정 완료) =================
 socket.on("dead", () => {
-// 내 체력바 제거
-if (myHpBar) myHpBar.remove();
 
-// 상대 체력바 전부 제거
-for (const id in hpBars) {
-    hpBars[id].remove();
-    delete hpBars[id];
-}
-
-// 상대 플레이어 제거
-for (const id in otherPlayers) {
-    otherPlayers[id].remove();
-    delete otherPlayers[id];
-}
-
-// 총알도 전부 삭제 (중요)
-document.querySelectorAll("div").forEach(el => {
-    if (el.style && el.style.borderRadius === "50%") {
-        el.remove();
-    }
-});
     if (dead) return;
     dead = true;
 
-    // 🔥 내 체력바 제거
+    // UI 완전 제거
     myHpBar.remove();
 
-    // 🔥 상대 체력바 전부 제거
     for (const id in hpBars) {
         hpBars[id].remove();
         delete hpBars[id];
     }
 
-    // 🔥 상대 플레이어도 제거
     for (const id in otherPlayers) {
         otherPlayers[id].remove();
         delete otherPlayers[id];
     }
+
+    // 총알 싹 제거
+    document.querySelectorAll("div").forEach(el => {
+        if (el.style && el.style.borderRadius === "50%") {
+            el.remove();
+        }
+    });
 
     const screen = document.createElement("div");
     screen.style.position = "fixed";
