@@ -4,7 +4,6 @@ const socket = io();
 const createRoomBtn = document.getElementById("createRoomBtn");
 const joinRoomBtn = document.getElementById("joinRoomBtn");
 const roomInput = document.getElementById("roomInput");
-const roomInfo = document.getElementById("roomInfo");
 const menu = document.getElementById("menu");
 
 // ================= ROOM UI =================
@@ -16,6 +15,7 @@ roomTop.style.color = "white";
 roomTop.style.fontSize = "20px";
 document.body.appendChild(roomTop);
 
+// ================= STATE =================
 let joinedRoom = false;
 let dead = false;
 
@@ -50,10 +50,9 @@ document.addEventListener("keyup", (e) => {
 // ================= GAME LOOP =================
 function gameLoop() {
 
-    if (dead) return;
     requestAnimationFrame(gameLoop);
 
-    if (!joinedRoom) return;
+    if (dead || !joinedRoom) return;
 
     if (keys["w"]) y -= speed;
     if (keys["s"]) y += speed;
@@ -178,17 +177,47 @@ socket.on("players", (players) => {
 // ================= HP =================
 socket.on("hpUpdate", (hpData) => {
 
+    // 내 체력
     if (hpData[socket.id] !== undefined) {
         myHp = hpData[socket.id];
         myHpBar.style.width = ((myHp / 100) * 50) + "px";
+    }
+
+    // 🔥 상대 HP 추가
+    for (const id in hpData) {
+
+        if (id === socket.id) continue;
+
+        if (!hpBars[id]) {
+            const bar = document.createElement("div");
+
+            bar.style.width = "50px";
+            bar.style.height = "6px";
+            bar.style.background = "red";
+            bar.style.position = "absolute";
+            bar.style.borderRadius = "3px";
+
+            document.body.appendChild(bar);
+            hpBars[id] = bar;
+        }
+
+        hpBars[id].style.width =
+            ((hpData[id] / 100) * 50) + "px";
+
+        if (otherPlayers[id]) {
+            hpBars[id].style.left = otherPlayers[id].style.left;
+            hpBars[id].style.top =
+                (parseInt(otherPlayers[id].style.top) - 12) + "px";
+        }
     }
 });
 
 // ================= ROOM =================
 function enterRoomUI(code) {
+
     joinedRoom = true;
 
-    menu.style.display = "none"; // 🔥 핵심
+    menu.style.display = "none";
     roomTop.innerText = "ROOM: " + code;
 }
 
@@ -203,7 +232,7 @@ joinRoomBtn.addEventListener("click", () => {
     socket.emit("joinRoom", code);
 });
 
-// ================= ROOM EVENTS =================
+// ================= EVENTS =================
 socket.on("roomCreated", (code) => {
     enterRoomUI(code);
 });
