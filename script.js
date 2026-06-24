@@ -136,7 +136,20 @@ document.addEventListener("click", (e) => {
         vy: (dy / len) * 10
     });
 });
+// ================= REMOTE SHOOT (상대방 총알) =================
+socket.on("shoot", (data) => {
 
+    // 내가 쏜 총알은 이미 클라이언트에서 직접 그렸으므로 중복 생성 방지
+    if (data.owner === socket.id) return;
+
+    if (!joinedRoom || dead) return;
+
+    // 서버에서 받은 vx, vy로 목표 지점을 역산해서 createBullet에 맞춰 호출
+    const targetX = data.x + data.vx * 100;
+    const targetY = data.y + data.vy * 100;
+
+    createBullet(data.id, data.x, data.y, targetX, targetY, "red");
+});
 // ================= PLAYERS =================
 socket.on("players", players => {
 
@@ -198,6 +211,13 @@ socket.on("hpUpdate", hpData => {
             hpBars[id].style.left = otherPlayers[id].style.left;
             hpBars[id].style.top =
                 (parseInt(otherPlayers[id].style.top) - 12) + "px";
+        }
+    }
+    // ⭐ 추가: hpData에 더 이상 없는 플레이어의 hpBar 제거
+    for (const id in hpBars) {
+        if (hpData[id] === undefined) {
+            hpBars[id].remove();
+            delete hpBars[id];
         }
     }
 });

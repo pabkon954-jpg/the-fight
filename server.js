@@ -80,16 +80,21 @@ io.on("connection", (socket) => {
         const room = rooms[socket.roomCode];
         if (!room) return;
 
-        const id = socket.id + "_" + Date.now();
+          const id = data.id; // ⭐ 클라이언트가 보낸 id를 그대로 사용
 
-        room.bullets[id] = {
-            owner: socket.id,
-            x: data.startX,
-            y: data.startY,
-            vx: data.vx,
-            vy: data.vy
-        };
+    room.bullets[id] = {
+        owner: socket.id,
+        x: data.startX,
+        y: data.startY,
+        vx: data.vx,
+        vy: data.vy
+    };
+
+    io.to(socket.roomCode).emit("shoot", {
+        id,
+        ...room.bullets[id]
     });
+});
 
     // ================= DISCONNECT =================
     socket.on("disconnect", () => {
