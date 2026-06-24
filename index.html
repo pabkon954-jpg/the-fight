@@ -7,7 +7,7 @@
 </head>
 <body>
 
-    <!-- 방 메뉴 -->
+    <!-- ================= 로비 UI ================= -->
     <div id="menu">
 
         <h2>My IO Game</h2>
@@ -20,7 +20,8 @@
 
         <input
             id="roomInput"
-            placeholder="방 번호 입력"
+            placeholder="4자리 방 번호 입력"
+            maxlength="4"
         >
 
         <button id="joinRoomBtn">
@@ -30,14 +31,17 @@
         <br><br>
 
         <div id="roomInfo">
-            방 없음
+            대기중...
         </div>
 
     </div>
 
-    <!-- 게임 플레이어 -->
-    <div id="player"></div>
+    <!-- ================= 게임 UI ================= -->
+    <div id="game">
+        <div id="player"></div>
+    </div>
 
+    <!-- socket.io -->
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 
