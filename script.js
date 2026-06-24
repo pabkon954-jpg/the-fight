@@ -170,7 +170,7 @@ socket.on("players", (players) => {
     }
 });
 
-// HP 업데이트
+// HP
 socket.on("hpUpdate", (hpData) => {
 
     for (const id in hpData) {
@@ -182,26 +182,28 @@ socket.on("hpUpdate", (hpData) => {
             const bar = document.createElement("div");
 
             bar.style.width = "50px";
-            bar.style.height = "5px";
+            bar.style.height = "6px";
             bar.style.background = "red";
             bar.style.position = "absolute";
+            bar.style.borderRadius = "3px";
 
             document.body.appendChild(bar);
 
             hpBars[id] = bar;
         }
 
+        // 체력바 길이 (최대 50px)
         hpBars[id].style.width =
-            hpData[id] + "%";
+            ((hpData[id] / 100) * 50) + "px";
 
-        // HP바를 플레이어 머리 위에 표시
+        // 플레이어 머리 위
         if (otherPlayers[id]) {
 
             hpBars[id].style.left =
                 otherPlayers[id].style.left;
 
             hpBars[id].style.top =
-                (parseInt(otherPlayers[id].style.top) - 10) + "px";
+                (parseInt(otherPlayers[id].style.top) - 12) + "px";
         }
     }
 });
