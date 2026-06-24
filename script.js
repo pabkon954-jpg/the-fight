@@ -6,7 +6,7 @@ const joinRoomBtn = document.getElementById("joinRoomBtn");
 const roomInput = document.getElementById("roomInput");
 const menu = document.getElementById("menu");
 
-// ================= ROOM UI =================
+// ================= UI =================
 const roomTop = document.createElement("div");
 roomTop.style.position = "absolute";
 roomTop.style.top = "10px";
@@ -26,9 +26,9 @@ const speed = 5;
 const keys = {};
 const otherPlayers = {};
 const hpBars = {};
-const bullets = {}; // 🔥 추가 (총알 관리)
+const bullets = {};
 
-// ================= MY HP =================
+// ================= HP =================
 let myHp = 100;
 
 const myHpBar = document.createElement("div");
@@ -40,12 +40,12 @@ myHpBar.style.borderRadius = "3px";
 document.body.appendChild(myHpBar);
 
 // ================= INPUT =================
-document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
-document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
+document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-// ================= GAME LOOP =================
-function gameLoop() {
-    requestAnimationFrame(gameLoop);
+// ================= LOOP =================
+function loop() {
+    requestAnimationFrame(loop);
     if (!joinedRoom || dead) return;
 
     if (keys["w"]) y -= speed;
@@ -61,21 +61,17 @@ function gameLoop() {
 
     socket.emit("move", { x, y });
 }
-gameLoop();
+loop();
 
 // ================= BULLET =================
 function createBullet(id, sx, sy, tx, ty, color) {
 
     const bullet = document.createElement("div");
-
     bullet.style.width = "10px";
     bullet.style.height = "10px";
     bullet.style.background = color;
-    bullet.style.borderRadius = "50%";
     bullet.style.position = "absolute";
-
-    bullet.style.left = sx + "px";
-    bullet.style.top = sy + "px";
+    bullet.style.borderRadius = "50%";
 
     document.body.appendChild(bullet);
 
@@ -86,13 +82,14 @@ function createBullet(id, sx, sy, tx, ty, color) {
     const vx = (dx / len) * 10;
     const vy = (dy / len) * 10;
 
-    bullets[id] = bullet; // 🔥 저장
+    bullets[id] = bullet;
 
     function move() {
+
         if (!bullets[id]) return;
 
-        let bx = parseFloat(bullet.style.left);
-        let by = parseFloat(bullet.style.top);
+        let bx = parseFloat(bullet.style.left || sx);
+        let by = parseFloat(bullet.style.top || sy);
 
         bx += vx;
         by += vy;
@@ -126,29 +123,22 @@ document.addEventListener("click", (e) => {
     const dx = e.clientX - sx;
     const dy = e.clientY - sy;
 
-    const len = Math.sqrt(dx * dx + dy * dy);
-
-    const vx = (dx / len) * 10;
-    const vy = (dy / len) * 10;
-
     const id = Date.now() + "_" + socket.id;
 
     createBullet(id, sx, sy, e.clientX, e.clientY, "yellow");
 
     socket.emit("shoot", {
-        id,
         startX: sx,
         startY: sy,
-        vx,
-        vy
+        vx: (dx / Math.sqrt(dx*dx + dy*dy)) * 10,
+        vy: (dy / Math.sqrt(dx*dx + dy*dy)) * 10
     });
 });
 
 // ================= PLAYERS =================
-socket.on("players", (players) => {
+socket.on("players", players => {
 
     for (const id in players) {
-
         if (id === socket.id) continue;
 
         if (!otherPlayers[id]) {
@@ -156,8 +146,8 @@ socket.on("players", (players) => {
             div.style.width = "50px";
             div.style.height = "50px";
             div.style.background = "lime";
-            div.style.borderRadius = "50%";
             div.style.position = "absolute";
+            div.style.borderRadius = "50%";
             document.body.appendChild(div);
             otherPlayers[id] = div;
         }
@@ -175,7 +165,7 @@ socket.on("players", (players) => {
 });
 
 // ================= HP =================
-socket.on("hpUpdate", (hpData) => {
+socket.on("hpUpdate", hpData => {
 
     if (dead) return;
 
@@ -207,18 +197,10 @@ socket.on("hpUpdate", (hpData) => {
                 (parseInt(otherPlayers[id].style.top) - 12) + "px";
         }
     }
-
-    // 🔥 죽은 HP바 제거
-    for (const id in hpBars) {
-        if (!hpData[id]) {
-            hpBars[id].remove();
-            delete hpBars[id];
-        }
-    }
 });
 
 // ================= ROOM =================
-function enterRoomUI(code) {
+function enterRoom(code) {
     joinedRoom = true;
     menu.style.display = "none";
     roomTop.innerText = "ROOM: " + code;
@@ -231,8 +213,8 @@ joinRoomBtn.onclick = () => {
     socket.emit("joinRoom", code);
 };
 
-socket.on("roomCreated", enterRoomUI);
-socket.on("roomJoined", enterRoomUI);
+socket.on("roomCreated", enterRoom);
+socket.on("roomJoined", enterRoom);
 
 // ================= DEAD =================
 socket.on("dead", () => {
@@ -242,20 +224,9 @@ socket.on("dead", () => {
 
     myHpBar.remove();
 
-    for (const id in hpBars) {
-        hpBars[id].remove();
-        delete hpBars[id];
-    }
-
-    for (const id in otherPlayers) {
-        otherPlayers[id].remove();
-        delete otherPlayers[id];
-    }
-
-    for (const id in bullets) {
-        bullets[id].remove();
-        delete bullets[id];
-    }
+    for (const id in hpBars) hpBars[id].remove();
+    for (const id in otherPlayers) otherPlayers[id].remove();
+    for (const id in bullets) bullets[id].remove();
 
     const screen = document.createElement("div");
     screen.style.position = "fixed";
@@ -277,7 +248,5 @@ socket.on("dead", () => {
 
     document.body.appendChild(screen);
 
-    document.getElementById("respawnBtn").onclick = () => {
-        location.reload();
-    };
+    document.getElementById("respawnBtn").onclick = () => location.reload();
 });

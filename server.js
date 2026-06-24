@@ -11,12 +11,10 @@ app.get("/", (req, res) => {
 
 const rooms = {};
 
-// ================= ROOM CODE =================
 function createRoomCode() {
     return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// ================= SOCKET =================
 io.on("connection", (socket) => {
 
     socket.roomCode = null;
@@ -51,11 +49,7 @@ io.on("connection", (socket) => {
     socket.on("joinRoom", (code) => {
 
         const room = rooms[code];
-
-        if (!room) {
-            socket.emit("roomNotFound");
-            return;
-        }
+        if (!room) return socket.emit("roomNotFound");
 
         socket.join(code);
         socket.roomCode = code;
@@ -73,8 +67,7 @@ io.on("connection", (socket) => {
     socket.on("move", (data) => {
 
         const room = rooms[socket.roomCode];
-        if (!room) return;
-        if (!room.players[socket.id]) return;
+        if (!room || !room.players[socket.id]) return;
 
         room.players[socket.id] = data;
 
@@ -87,7 +80,7 @@ io.on("connection", (socket) => {
         const room = rooms[socket.roomCode];
         if (!room) return;
 
-        const id = socket.id + Date.now();
+        const id = socket.id + "_" + Date.now();
 
         room.bullets[id] = {
             owner: socket.id,
@@ -97,11 +90,8 @@ io.on("connection", (socket) => {
             vy: data.vy
         };
 
-        // 🔥 핵심: 모든 사람에게 총알 전달
-        io.to(socket.roomCode).emit("shoot", {
-            owner: socket.id,
-            ...data
-        });
+        // 🔥 전체에게 총알 보여주기 (중요)
+        io.to(socket.roomCode).emit("shoot", data);
     });
 
     // ================= DISCONNECT =================
@@ -109,7 +99,6 @@ io.on("connection", (socket) => {
 
         const code = socket.roomCode;
         const room = rooms[code];
-
         if (!room) return;
 
         delete room.players[socket.id];
@@ -125,7 +114,6 @@ io.on("connection", (socket) => {
     });
 });
 
-// ================= GAME LOOP =================
 setInterval(() => {
 
     for (const code in rooms) {
@@ -156,7 +144,9 @@ setInterval(() => {
                     delete room.bullets[bid];
 
                     if (room.hp[pid] <= 0) {
-                        io.to(code).emit("dead", pid);
+
+                        // 🔥 1명만 죽게
+                        io.to(pid).emit("dead");
 
                         delete room.players[pid];
                         delete room.hp[pid];
@@ -167,17 +157,10 @@ setInterval(() => {
             }
         }
 
-        // 🔥 핵심 sync
-        io.to(code).emit("players", room.players);
         io.to(code).emit("hpUpdate", room.hp);
-        io.to(code).emit("bullets", room.bullets);
     }
 
 }, 50);
 
-// ================= START =================
 const PORT = process.env.PORT || 3000;
-
-http.listen(PORT, () => {
-    console.log("Server running on " + PORT);
-});
+http.listen(PORT, () => console.log("Server running on " + PORT));
