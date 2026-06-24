@@ -90,7 +90,7 @@ io.on("connection", (socket) => {
             vy: data.vy
         };
 
-        // 🔥 핵심: "전체 총알 동기화"
+        // 🔥 핵심: 모든 클라이언트에 총알 동기화
         io.to(socket.roomCode).emit("shoot", {
             id,
             ...room.bullets[id]
@@ -116,7 +116,6 @@ io.on("connection", (socket) => {
         io.to(code).emit("hpUpdate", room.hp);
     });
 });
-
 
 // ================= GAME LOOP =================
 setInterval(() => {
@@ -146,7 +145,6 @@ setInterval(() => {
                 if (dist < 20) {
 
                     room.hp[pid] -= 10;
-
                     delete room.bullets[bid];
 
                     if (room.hp[pid] <= 0) {
@@ -161,6 +159,8 @@ setInterval(() => {
         }
 
         io.to(code).emit("hpUpdate", room.hp);
+        io.to(code).emit("players", room.players);
+        io.to(code).emit("bullets", room.bullets);
     }
 
 }, 50);
