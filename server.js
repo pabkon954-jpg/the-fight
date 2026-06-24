@@ -163,11 +163,13 @@ setInterval(() => {
             }
         }
 
+        // 🔥 핵심 추가 3개
+        io.to(code).emit("players", room.players);
         io.to(code).emit("hpUpdate", room.hp);
+        io.to(code).emit("bullets", room.bullets);
     }
 
 }, 50);
-
 // ================= START =================
 const PORT = process.env.PORT || 3000;
 

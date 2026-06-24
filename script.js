@@ -247,18 +247,43 @@ socket.on("roomNotFound", () => {
 
 // ================= DEAD =================
 socket.on("dead", () => {
+// 내 체력바 제거
+if (myHpBar) myHpBar.remove();
 
+// 상대 체력바 전부 제거
+for (const id in hpBars) {
+    hpBars[id].remove();
+    delete hpBars[id];
+}
+
+// 상대 플레이어 제거
+for (const id in otherPlayers) {
+    otherPlayers[id].remove();
+    delete otherPlayers[id];
+}
+
+// 총알도 전부 삭제 (중요)
+document.querySelectorAll("div").forEach(el => {
+    if (el.style && el.style.borderRadius === "50%") {
+        el.remove();
+    }
+});
     if (dead) return;
     dead = true;
 
-    myHpBar.remove(); // 🔥 이게 더 확실함
+    // 🔥 내 체력바 제거
+    myHpBar.remove();
 
+    // 🔥 상대 체력바 전부 제거
     for (const id in hpBars) {
         hpBars[id].remove();
+        delete hpBars[id];
     }
 
+    // 🔥 상대 플레이어도 제거
     for (const id in otherPlayers) {
         otherPlayers[id].remove();
+        delete otherPlayers[id];
     }
 
     const screen = document.createElement("div");
@@ -272,12 +297,11 @@ socket.on("dead", () => {
     screen.style.display = "flex";
     screen.style.justifyContent = "center";
     screen.style.alignItems = "center";
-    screen.style.flexDirection = "column";
     screen.style.fontSize = "40px";
 
     screen.innerHTML = `
         <div>YOU DIED</div>
-        <button id="respawnBtn" style="margin-top:20px;font-size:20px;padding:10px;">
+        <button id="respawnBtn" style="margin-top:20px;padding:10px;">
             Respawn
         </button>
     `;
