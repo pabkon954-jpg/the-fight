@@ -174,3 +174,49 @@ const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
     console.log("Server running on " + PORT);
 });
+socket.on("dead", () => {
+
+    if (dead) return;
+    dead = true;
+
+    myHpBar.style.display = "none";
+
+    // ================= 핵심 추가 =================
+    for (const id in hpBars) {
+        hpBars[id].remove();
+        delete hpBars[id];
+    }
+
+    for (const id in otherPlayers) {
+        otherPlayers[id].remove();
+        delete otherPlayers[id];
+    }
+
+    const screen = document.createElement("div");
+
+    screen.style.position = "fixed";
+    screen.style.top = "0";
+    screen.style.left = "0";
+    screen.style.width = "100%";
+    screen.style.height = "100%";
+    screen.style.background = "rgba(0,0,0,0.9)";
+    screen.style.color = "white";
+    screen.style.display = "flex";
+    screen.style.justifyContent = "center";
+    screen.style.alignItems = "center";
+    screen.style.flexDirection = "column";
+    screen.style.fontSize = "40px";
+
+    screen.innerHTML = `
+        <div>YOU DIED</div>
+        <button id="respawnBtn" style="margin-top:20px;font-size:20px;padding:10px;">
+            Respawn
+        </button>
+    `;
+
+    document.body.appendChild(screen);
+
+    document.getElementById("respawnBtn").onclick = () => {
+        location.reload();
+    };
+});
