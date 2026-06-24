@@ -2,19 +2,6 @@ const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
 const io = require("socket.io")(http);
-const createRoomBtn =
-    document.getElementById("createRoomBtn");
-
-const joinRoomBtn =
-    document.getElementById("joinRoomBtn");
-
-const roomInput =
-    document.getElementById("roomInput");
-
-const roomInfo =
-    document.getElementById("roomInfo");
-
-let joinedRoom = false;
 
 app.use(express.static(__dirname));
 
