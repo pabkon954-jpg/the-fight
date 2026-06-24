@@ -1,49 +1,218 @@
 <!DOCTYPE html>
-<html>
+<html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <title>My IO Game</title>
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<title>IO Game</title>
+<style>
+    html, body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #111;
+        font-family: sans-serif;
+    }
+
+    /* ============ MENU (방 생성/입장) ============ */
+    #menu {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 16px;
+        color: white;
+        z-index: 20;
+    }
+
+    #menu button, #menu input {
+        font-size: 18px;
+        padding: 10px 16px;
+        border-radius: 6px;
+        border: none;
+    }
+
+    #menu button {
+        background: #4a4a4a;
+        color: white;
+        cursor: pointer;
+    }
+
+    #menu button:hover {
+        background: #666;
+    }
+
+    /* ============ LOBBY (대기/캐릭터 선택) ============ */
+    #lobby {
+        position: fixed;
+        inset: 0;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        color: white;
+        z-index: 15;
+        padding: 30px;
+        box-sizing: border-box;
+    }
+
+    #lobbyRoomCode {
+        font-size: 22px;
+        margin-bottom: 20px;
+    }
+
+    #lobbyMain {
+        display: flex;
+        gap: 40px;
+        width: 100%;
+        max-width: 900px;
+        justify-content: center;
+    }
+
+    /* 캐릭터 선택 카드 영역 */
+    #characterSelect {
+        display: flex;
+        gap: 20px;
+    }
+
+    .char-card {
+        width: 140px;
+        padding: 16px;
+        border: 3px solid #444;
+        border-radius: 10px;
+        background: #222;
+        cursor: pointer;
+        text-align: center;
+        transition: border-color 0.15s, transform 0.1s;
+    }
+
+    .char-card:hover {
+        transform: translateY(-3px);
+    }
+
+    .char-card.selected {
+        border-color: #ffd23f;
+    }
+
+    .char-swatch {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        margin: 0 auto 10px;
+    }
+
+    .char-name {
+        font-weight: bold;
+        margin-bottom: 6px;
+    }
+
+    .char-stats {
+        font-size: 12px;
+        color: #aaa;
+        line-height: 1.4;
+    }
+
+    /* 대기 인원 목록 */
+    #playerList {
+        width: 220px;
+        background: #1c1c1c;
+        border-radius: 10px;
+        padding: 16px;
+    }
+
+    #playerList h3 {
+        margin-top: 0;
+        font-size: 16px;
+        color: #ccc;
+    }
+
+    .player-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 6px;
+        border-bottom: 1px solid #333;
+        font-size: 14px;
+    }
+
+    .player-row .host-tag {
+        color: #ffd23f;
+        font-size: 11px;
+        margin-left: 4px;
+    }
+
+    .player-row .ready-tag {
+        font-size: 12px;
+    }
+
+    .ready-tag.yes { color: #4caf50; }
+    .ready-tag.no { color: #888; }
+
+    #startBtn {
+        margin-top: 24px;
+        font-size: 20px;
+        padding: 12px 30px;
+        border-radius: 8px;
+        border: none;
+        background: #4caf50;
+        color: white;
+        cursor: pointer;
+    }
+
+    #startBtn:disabled {
+        background: #555;
+        cursor: not-allowed;
+    }
+
+    #lobbyMessage {
+        margin-top: 10px;
+        color: #ff6b6b;
+        height: 20px;
+        font-size: 14px;
+    }
+
+    /* ============ GAME ============ */
+    #player {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: yellow;
+        position: absolute;
+        z-index: 1;
+    }
+</style>
 </head>
 <body>
 
-    <!-- ================= 로비 UI ================= -->
+    <!-- ===== MENU ===== -->
     <div id="menu">
+        <h1>IO Game</h1>
+        <button id="createRoomBtn">방 만들기</button>
+        <div>
+            <input id="roomInput" placeholder="방 코드 입력" maxlength="4">
+            <button id="joinRoomBtn">입장하기</button>
+        </div>
+    </div>
 
-        <h2>My IO Game</h2>
+    <!-- ===== LOBBY ===== -->
+    <div id="lobby">
+        <div id="lobbyRoomCode">ROOM: ----</div>
 
-        <button id="createRoomBtn">
-            방 만들기
-        </button>
-
-        <br><br>
-
-        <input
-            id="roomInput"
-            placeholder="4자리 방 번호 입력"
-            maxlength="4"
-        >
-
-        <button id="joinRoomBtn">
-            방 참가
-        </button>
-
-        <br><br>
-
-        <div id="roomInfo">
-            대기중...
+        <div id="lobbyMain">
+            <div id="characterSelect"></div>
+            <div id="playerList">
+                <h3>대기 중인 플레이어</h3>
+                <div id="playerListItems"></div>
+            </div>
         </div>
 
+        <button id="startBtn" disabled>시작</button>
+        <div id="lobbyMessage"></div>
     </div>
 
-    <!-- ================= 게임 UI ================= -->
-    <div id="game">
-        <div id="player"></div>
-    </div>
+    <!-- ===== GAME ===== -->
+    <div id="player"></div>
 
-    <!-- socket.io -->
     <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
-
+    <script src="client.js"></script>
 </body>
 </html>
