@@ -41,8 +41,10 @@ io.on("connection", (socket) => {
 
         socket.emit("roomCreated", code);
 
-        io.to(code).emit("players", rooms[code].players);
-        io.to(code).emit("hpUpdate", rooms[code].hp);
+        setTimeout(() => {
+            io.to(code).emit("players", rooms[code].players);
+            io.to(code).emit("hpUpdate", rooms[code].hp);
+        }, 50);
     });
 
     // ================= JOIN ROOM =================
@@ -59,24 +61,22 @@ io.on("connection", (socket) => {
 
         socket.emit("roomJoined", code);
 
-        io.to(code).emit("players", room.players);
-        io.to(code).emit("hpUpdate", room.hp);
+        setTimeout(() => {
+            io.to(code).emit("players", room.players);
+            io.to(code).emit("hpUpdate", room.hp);
+        }, 50);
     });
 
     // ================= MOVE =================
     socket.on("move", (data) => {
-
         const room = rooms[socket.roomCode];
         if (!room || !room.players[socket.id]) return;
 
         room.players[socket.id] = data;
-
-        io.to(socket.roomCode).emit("players", room.players);
     });
 
     // ================= SHOOT =================
     socket.on("shoot", (data) => {
-
         const room = rooms[socket.roomCode];
         if (!room) return;
 
@@ -89,12 +89,6 @@ io.on("connection", (socket) => {
             vx: data.vx,
             vy: data.vy
         };
-
-        // 🔥 핵심: 모든 클라이언트에 총알 동기화
-        io.to(socket.roomCode).emit("shoot", {
-            id,
-            ...room.bullets[id]
-        });
     });
 
     // ================= DISCONNECT =================
@@ -111,11 +105,9 @@ io.on("connection", (socket) => {
             delete rooms[code];
             return;
         }
-
-        io.to(code).emit("players", room.players);
-        io.to(code).emit("hpUpdate", room.hp);
     });
 });
+
 
 // ================= GAME LOOP =================
 setInterval(() => {
@@ -124,6 +116,7 @@ setInterval(() => {
 
         const room = rooms[code];
 
+        // bullets
         for (const bid in room.bullets) {
 
             const b = room.bullets[bid];
@@ -158,8 +151,9 @@ setInterval(() => {
             }
         }
 
-        io.to(code).emit("hpUpdate", room.hp);
+        // 🔥 핵심 동기화
         io.to(code).emit("players", room.players);
+        io.to(code).emit("hpUpdate", room.hp);
         io.to(code).emit("bullets", room.bullets);
     }
 

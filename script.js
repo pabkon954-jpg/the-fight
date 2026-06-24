@@ -14,6 +14,7 @@ roomTop.style.color = "white";
 roomTop.style.fontSize = "20px";
 document.body.appendChild(roomTop);
 
+// ================= STATE =================
 let joinedRoom = false;
 let dead = false;
 
@@ -26,6 +27,7 @@ const otherPlayers = {};
 const hpBars = {};
 const bullets = {};
 
+// ================= HP =================
 let myHp = 100;
 
 const myHpBar = document.createElement("div");
@@ -60,6 +62,56 @@ function loop() {
 }
 loop();
 
+// ================= BULLET =================
+function createBullet(id, sx, sy, tx, ty, color) {
+
+    if (bullets[id]) return;
+
+    const bullet = document.createElement("div");
+    bullet.style.width = "10px";
+    bullet.style.height = "10px";
+    bullet.style.background = color;
+    bullet.style.position = "absolute";
+    bullet.style.borderRadius = "50%";
+
+    document.body.appendChild(bullet);
+
+    const dx = tx - sx;
+    const dy = ty - sy;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    const vx = (dx / len) * 10;
+    const vy = (dy / len) * 10;
+
+    bullets[id] = bullet;
+
+    let bx = sx;
+    let by = sy;
+
+    function move() {
+        if (!bullets[id]) return;
+
+        bx += vx;
+        by += vy;
+
+        bullet.style.left = bx + "px";
+        bullet.style.top = by + "px";
+
+        if (
+            bx < -100 || bx > window.innerWidth + 100 ||
+            by < -100 || by > window.innerHeight + 100
+        ) {
+            bullet.remove();
+            delete bullets[id];
+            return;
+        }
+
+        requestAnimationFrame(move);
+    }
+
+    move();
+}
+
 // ================= SHOOT =================
 document.addEventListener("click", (e) => {
 
@@ -75,78 +127,18 @@ document.addEventListener("click", (e) => {
 
     const id = socket.id + "_" + Date.now();
 
+    createBullet(id, sx, sy, e.clientX, e.clientY, "yellow");
+
     socket.emit("shoot", {
-        id,
         startX: sx,
         startY: sy,
         vx: (dx / len) * 10,
         vy: (dy / len) * 10
     });
-
-    // 내 총알도 즉시 생성
-    spawnBullet(id, sx, sy, dx, dy, "yellow");
-});
-
-// ================= BULLET SPAWN =================
-function spawnBullet(id, sx, sy, dx, dy, color) {
-
-    if (bullets[id]) return;
-
-    const bullet = document.createElement("div");
-    bullet.style.width = "10px";
-    bullet.style.height = "10px";
-    bullet.style.background = color;
-    bullet.style.position = "absolute";
-    bullet.style.borderRadius = "50%";
-
-    document.body.appendChild(bullet);
-
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    const vx = (dx / len) * 10;
-    const vy = (dy / len) * 10;
-
-    let bx = sx;
-    let by = sy;
-
-    bullets[id] = bullet;
-
-    function move() {
-        if (!bullets[id] || dead) return;
-
-        bx += vx;
-        by += vy;
-
-        bullet.style.left = bx + "px";
-        bullet.style.top = by + "px";
-
-        requestAnimationFrame(move);
-    }
-
-    move();
-}
-
-// ================= RECEIVE BULLETS =================
-socket.on("shoot", (b) => {
-
-    if (!joinedRoom || dead) return;
-
-    const ownerX = b.owner === socket.id ? x : 0;
-    const ownerY = b.owner === socket.id ? y : 0;
-
-    spawnBullet(
-        b.id,
-        b.x,
-        b.y,
-        b.vx * 10,
-        b.vy * 10,
-        b.owner === socket.id ? "yellow" : "red"
-    );
 });
 
 // ================= PLAYERS =================
-socket.on("players", (players) => {
-
-    if (!joinedRoom || dead) return;
+socket.on("players", players => {
 
     for (const id in players) {
 
@@ -195,6 +187,7 @@ socket.on("hpUpdate", hpData => {
             bar.style.height = "6px";
             bar.style.background = "red";
             bar.style.position = "absolute";
+            bar.style.borderRadius = "3px";
             document.body.appendChild(bar);
             hpBars[id] = bar;
         }
@@ -208,6 +201,25 @@ socket.on("hpUpdate", hpData => {
         }
     }
 });
+
+// ================= ROOM =================
+function enterRoom(code) {
+    joinedRoom = true;
+    dead = false;
+    menu.style.display = "none";
+    roomTop.innerText = "ROOM: " + code;
+}
+
+createRoomBtn.onclick = () => socket.emit("createRoom");
+
+joinRoomBtn.onclick = () => {
+    const code = roomInput.value.trim();
+    if (!code) return;
+    socket.emit("joinRoom", code);
+};
+
+socket.on("roomCreated", enterRoom);
+socket.on("roomJoined", enterRoom);
 
 // ================= DEAD =================
 socket.on("dead", () => {
