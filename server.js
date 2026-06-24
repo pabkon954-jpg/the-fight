@@ -5,97 +5,92 @@ const io = require("socket.io")(http);
 
 app.use(express.static(__dirname));
 
+// Render용 필수
+app.get("/", (req, res) => {
+    res.sendFile(__dirname + "/index.html");
+});
+
 const rooms = {};
 
-// ======================
-// 방 코드 생성
-// ======================
+// ================= ROOM CODE =================
 function createRoomCode() {
     return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// ======================
-// 연결
-// ======================
+// ================= SOCKET =================
 io.on("connection", (socket) => {
 
     socket.roomCode = null;
 
-    // ======================
-    // 방 생성
-    // ======================
+    // ===== CREATE ROOM =====
     socket.on("createRoom", () => {
 
-        let roomCode;
-
+        let code;
         do {
-            roomCode = createRoomCode();
-        } while (rooms[roomCode]);
+            code = createRoomCode();
+        } while (rooms[code]);
 
-        rooms[roomCode] = {
+        rooms[code] = {
             players: {},
             hp: {},
             bullets: {}
         };
 
-        socket.join(roomCode);
-        socket.roomCode = roomCode;
+        socket.join(code);
+        socket.roomCode = code;
 
-        rooms[roomCode].players[socket.id] = { x: 100, y: 100 };
-        rooms[roomCode].hp[socket.id] = 100;
+        rooms[code].players[socket.id] = { x: 100, y: 100 };
+        rooms[code].hp[socket.id] = 100;
 
-        socket.emit("roomCreated", roomCode);
+        socket.emit("roomCreated", code);
 
-        io.to(roomCode).emit("players", rooms[roomCode].players);
-        io.to(roomCode).emit("hpUpdate", rooms[roomCode].hp);
+        io.to(code).emit("players", rooms[code].players);
+        io.to(code).emit("hpUpdate", rooms[code].hp);
     });
 
-    // ======================
-    // 방 참가
-    // ======================
-    socket.on("joinRoom", (roomCode) => {
+    // ===== JOIN ROOM =====
+    socket.on("joinRoom", (code) => {
 
-        const room = rooms[roomCode];
+        const room = rooms[code];
 
         if (!room) {
             socket.emit("roomNotFound");
             return;
         }
 
-        socket.join(roomCode);
-        socket.roomCode = roomCode;
+        socket.join(code);
+        socket.roomCode = code;
 
         room.players[socket.id] = { x: 100, y: 100 };
         room.hp[socket.id] = 100;
 
-        socket.emit("roomJoined", roomCode);
+        socket.emit("roomJoined", code);
 
-        io.to(roomCode).emit("players", room.players);
-        io.to(roomCode).emit("hpUpdate", room.hp);
+        io.to(code).emit("players", room.players);
+        io.to(code).emit("hpUpdate", room.hp);
     });
 
-    // ======================
-    // 이동 (데이터만 저장)
-    // ======================
+    // ===== MOVE =====
     socket.on("move", (data) => {
 
         const room = rooms[socket.roomCode];
         if (!room) return;
+        if (!room.players[socket.id]) return;
 
         room.players[socket.id] = data;
+
+        io.to(socket.roomCode).emit("players", room.players);
     });
 
-    // ======================
-    // 발사
-    // ======================
+    // ===== SHOOT =====
     socket.on("shoot", (data) => {
 
         const room = rooms[socket.roomCode];
         if (!room) return;
 
-        const bulletId = socket.id + "_" + Date.now();
+        const id = socket.id + Date.now();
 
-        room.bullets[bulletId] = {
+        room.bullets[id] = {
             owner: socket.id,
             x: data.startX,
             y: data.startY,
@@ -106,13 +101,11 @@ io.on("connection", (socket) => {
         socket.to(socket.roomCode).emit("shoot", data);
     });
 
-    // ======================
-    // disconnect
-    // ======================
+    // ===== DISCONNECT =====
     socket.on("disconnect", () => {
 
-        const roomCode = socket.roomCode;
-        const room = rooms[roomCode];
+        const code = socket.roomCode;
+        const room = rooms[code];
 
         if (!room) return;
 
@@ -120,31 +113,25 @@ io.on("connection", (socket) => {
         delete room.hp[socket.id];
 
         if (Object.keys(room.players).length === 0) {
-            delete rooms[roomCode];
+            delete rooms[code];
             return;
         }
 
-        io.to(roomCode).emit("players", room.players);
-        io.to(roomCode).emit("hpUpdate", room.hp);
+        io.to(code).emit("players", room.players);
+        io.to(code).emit("hpUpdate", room.hp);
     });
-
 });
 
-// ======================
-// 게임 루프 (핵심 동기화)
-// ======================
+// ================= GAME LOOP =================
 setInterval(() => {
 
-    for (const roomCode in rooms) {
+    for (const code in rooms) {
 
-        const room = rooms[roomCode];
+        const room = rooms[code];
 
-        // ======================
-        // 총알 이동 + 충돌
-        // ======================
-        for (const bulletId in room.bullets) {
+        for (const bid in room.bullets) {
 
-            const b = room.bullets[bulletId];
+            const b = room.bullets[bid];
 
             b.x += b.vx;
             b.y += b.vy;
@@ -155,18 +142,15 @@ setInterval(() => {
 
                 const p = room.players[pid];
 
-                const px = p.x + 25;
-                const py = p.y + 25;
-
-                const dx = px - b.x;
-                const dy = py - b.y;
+                const dx = (p.x + 25) - b.x;
+                const dy = (p.y + 25) - b.y;
 
                 const dist = Math.sqrt(dx * dx + dy * dy);
 
                 if (dist < 20) {
 
                     room.hp[pid] -= 10;
-                    delete room.bullets[bulletId];
+                    delete room.bullets[bid];
 
                     if (room.hp[pid] <= 0) {
                         io.to(pid).emit("dead");
@@ -177,28 +161,16 @@ setInterval(() => {
                     break;
                 }
             }
-
-            // 화면 밖 제거
-            if (
-                b.x < -200 || b.x > 5000 ||
-                b.y < -200 || b.y > 5000
-            ) {
-                delete room.bullets[bulletId];
-            }
         }
 
-        // ======================
-        // 🔥 핵심: 여기서만 동기화
-        // ======================
-        io.to(roomCode).emit("players", room.players);
-        io.to(roomCode).emit("hpUpdate", room.hp);
+        io.to(code).emit("hpUpdate", room.hp);
     }
 
-}, 50); // 🔥 20fps (안정 핵심)
+}, 50);
 
-// ======================
+// ================= START =================
 const PORT = process.env.PORT || 3000;
 
 http.listen(PORT, () => {
-    console.log("Server running on port " + PORT);
+    console.log("Server running on " + PORT);
 });
