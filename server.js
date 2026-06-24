@@ -5,7 +5,6 @@ const io = require("socket.io")(http);
 
 app.use(express.static(__dirname));
 
-// Render용 필수
 app.get("/", (req, res) => {
     res.sendFile(__dirname + "/index.html");
 });
@@ -22,7 +21,7 @@ io.on("connection", (socket) => {
 
     socket.roomCode = null;
 
-    // ===== CREATE ROOM =====
+    // ================= CREATE ROOM =================
     socket.on("createRoom", () => {
 
         let code;
@@ -48,7 +47,7 @@ io.on("connection", (socket) => {
         io.to(code).emit("hpUpdate", rooms[code].hp);
     });
 
-    // ===== JOIN ROOM =====
+    // ================= JOIN ROOM =================
     socket.on("joinRoom", (code) => {
 
         const room = rooms[code];
@@ -70,7 +69,7 @@ io.on("connection", (socket) => {
         io.to(code).emit("hpUpdate", room.hp);
     });
 
-    // ===== MOVE =====
+    // ================= MOVE =================
     socket.on("move", (data) => {
 
         const room = rooms[socket.roomCode];
@@ -82,7 +81,7 @@ io.on("connection", (socket) => {
         io.to(socket.roomCode).emit("players", room.players);
     });
 
-    // ===== SHOOT =====
+    // ================= SHOOT =================
     socket.on("shoot", (data) => {
 
         const room = rooms[socket.roomCode];
@@ -98,10 +97,14 @@ io.on("connection", (socket) => {
             vy: data.vy
         };
 
-        socket.to(socket.roomCode).emit("shoot", data);
+        // 🔥 핵심: 모든 사람에게 총알 전달
+        io.to(socket.roomCode).emit("shoot", {
+            owner: socket.id,
+            ...data
+        });
     });
 
-    // ===== DISCONNECT =====
+    // ================= DISCONNECT =================
     socket.on("disconnect", () => {
 
         const code = socket.roomCode;
@@ -153,7 +156,8 @@ setInterval(() => {
                     delete room.bullets[bid];
 
                     if (room.hp[pid] <= 0) {
-                        io.to(pid).emit("dead");
+                        io.to(code).emit("dead", pid);
+
                         delete room.players[pid];
                         delete room.hp[pid];
                     }
@@ -163,13 +167,14 @@ setInterval(() => {
             }
         }
 
-        // 🔥 핵심 추가 3개
+        // 🔥 핵심 sync
         io.to(code).emit("players", room.players);
         io.to(code).emit("hpUpdate", room.hp);
         io.to(code).emit("bullets", room.bullets);
     }
 
 }, 50);
+
 // ================= START =================
 const PORT = process.env.PORT || 3000;
 

@@ -26,6 +26,7 @@ const speed = 5;
 const keys = {};
 const otherPlayers = {};
 const hpBars = {};
+const bullets = {}; // 🔥 추가 (총알 관리)
 
 // ================= MY HP =================
 let myHp = 100;
@@ -63,7 +64,8 @@ function gameLoop() {
 gameLoop();
 
 // ================= BULLET =================
-function createBullet(sx, sy, tx, ty, color) {
+function createBullet(id, sx, sy, tx, ty, color) {
+
     const bullet = document.createElement("div");
 
     bullet.style.width = "10px";
@@ -84,7 +86,11 @@ function createBullet(sx, sy, tx, ty, color) {
     const vx = (dx / len) * 10;
     const vy = (dy / len) * 10;
 
+    bullets[id] = bullet; // 🔥 저장
+
     function move() {
+        if (!bullets[id]) return;
+
         let bx = parseFloat(bullet.style.left);
         let by = parseFloat(bullet.style.top);
 
@@ -99,6 +105,7 @@ function createBullet(sx, sy, tx, ty, color) {
             by < -100 || by > window.innerHeight + 100
         ) {
             bullet.remove();
+            delete bullets[id];
             return;
         }
 
@@ -110,6 +117,7 @@ function createBullet(sx, sy, tx, ty, color) {
 
 // ================= SHOOT =================
 document.addEventListener("click", (e) => {
+
     if (!joinedRoom || dead) return;
 
     const sx = x + 25;
@@ -123,9 +131,12 @@ document.addEventListener("click", (e) => {
     const vx = (dx / len) * 10;
     const vy = (dy / len) * 10;
 
-    createBullet(sx, sy, e.clientX, e.clientY, "yellow");
+    const id = Date.now() + "_" + socket.id;
+
+    createBullet(id, sx, sy, e.clientX, e.clientY, "yellow");
 
     socket.emit("shoot", {
+        id,
         startX: sx,
         startY: sy,
         vx,
@@ -137,6 +148,7 @@ document.addEventListener("click", (e) => {
 socket.on("players", (players) => {
 
     for (const id in players) {
+
         if (id === socket.id) continue;
 
         if (!otherPlayers[id]) {
@@ -167,14 +179,13 @@ socket.on("hpUpdate", (hpData) => {
 
     if (dead) return;
 
-    // 내 HP
     if (hpData[socket.id] !== undefined) {
         myHp = hpData[socket.id];
         myHpBar.style.width = (myHp / 100) * 50 + "px";
     }
 
-    // 상대 HP
     for (const id in hpData) {
+
         if (id === socket.id) continue;
 
         if (!hpBars[id]) {
@@ -192,7 +203,16 @@ socket.on("hpUpdate", (hpData) => {
 
         if (otherPlayers[id]) {
             hpBars[id].style.left = otherPlayers[id].style.left;
-            hpBars[id].style.top = (parseInt(otherPlayers[id].style.top) - 12) + "px";
+            hpBars[id].style.top =
+                (parseInt(otherPlayers[id].style.top) - 12) + "px";
+        }
+    }
+
+    // 🔥 죽은 HP바 제거
+    for (const id in hpBars) {
+        if (!hpData[id]) {
+            hpBars[id].remove();
+            delete hpBars[id];
         }
     }
 });
@@ -214,13 +234,12 @@ joinRoomBtn.onclick = () => {
 socket.on("roomCreated", enterRoomUI);
 socket.on("roomJoined", enterRoomUI);
 
-// ================= DEAD (핵심 수정 완료) =================
+// ================= DEAD =================
 socket.on("dead", () => {
 
     if (dead) return;
     dead = true;
 
-    // UI 완전 제거
     myHpBar.remove();
 
     for (const id in hpBars) {
@@ -233,24 +252,20 @@ socket.on("dead", () => {
         delete otherPlayers[id];
     }
 
-    // 총알 싹 제거
-    document.querySelectorAll("div").forEach(el => {
-        if (el.style && el.style.borderRadius === "50%") {
-            el.remove();
-        }
-    });
+    for (const id in bullets) {
+        bullets[id].remove();
+        delete bullets[id];
+    }
 
     const screen = document.createElement("div");
     screen.style.position = "fixed";
-    screen.style.top = "0";
-    screen.style.left = "0";
-    screen.style.width = "100%";
-    screen.style.height = "100%";
+    screen.style.inset = "0";
     screen.style.background = "rgba(0,0,0,0.9)";
     screen.style.color = "white";
     screen.style.display = "flex";
     screen.style.justifyContent = "center";
     screen.style.alignItems = "center";
+    screen.style.flexDirection = "column";
     screen.style.fontSize = "40px";
 
     screen.innerHTML = `
