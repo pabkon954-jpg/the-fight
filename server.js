@@ -7,6 +7,9 @@ app.use(express.static(__dirname));
 
 const rooms = {};
 
+// ======================
+// 방 코드 생성
+// ======================
 function createRoomCode() {
     return Math.floor(1000 + Math.random() * 9000).toString();
 }
@@ -73,16 +76,18 @@ io.on("connection", (socket) => {
     });
 
     // ======================
-    // 이동
+    // 이동 (🔥 핵심 수정)
     // ======================
     socket.on("move", (data) => {
 
         const room = rooms[socket.roomCode];
         if (!room) return;
-
         if (!room.players[socket.id]) return;
 
         room.players[socket.id] = data;
+
+        // 🔥 즉시 반영 (이거 없으면 "안 움직이는 것처럼 보임")
+        io.to(socket.roomCode).emit("players", room.players);
     });
 
     // ======================
@@ -107,7 +112,7 @@ io.on("connection", (socket) => {
     });
 
     // ======================
-    // disconnect
+    // 나가기
     // ======================
     socket.on("disconnect", () => {
 
@@ -122,6 +127,7 @@ io.on("connection", (socket) => {
         // 방 비었으면 삭제
         if (Object.keys(room.players).length === 0) {
             delete rooms[roomCode];
+            return;
         }
 
         io.to(roomCode).emit("players", room.players);
@@ -131,15 +137,13 @@ io.on("connection", (socket) => {
 });
 
 // ======================
-// 게임 루프
+// 게임 루프 (총알/충돌)
 // ======================
 setInterval(() => {
 
     for (const roomCode in rooms) {
 
         const room = rooms[roomCode];
-
-        if (!room) continue;
 
         for (const bulletId in room.bullets) {
 
@@ -180,13 +184,14 @@ setInterval(() => {
                 }
             }
 
-            // 화면 밖 제거
-            if (b.x < -200 || b.x > 5000 || b.y < -200 || b.y > 5000) {
+            if (
+                b.x < -200 || b.x > 5000 ||
+                b.y < -200 || b.y > 5000
+            ) {
                 delete room.bullets[bulletId];
             }
         }
 
-        io.to(roomCode).emit("players", room.players);
         io.to(roomCode).emit("hpUpdate", room.hp);
     }
 
