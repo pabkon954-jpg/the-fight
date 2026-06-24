@@ -1,20 +1,13 @@
 const player = document.getElementById("player");
 const socket = io();
-const createRoomBtn =
-    document.getElementById("createRoomBtn");
 
-const joinRoomBtn =
-    document.getElementById("joinRoomBtn");
-
-const roomInput =
-    document.getElementById("roomInput");
-
-const roomInfo =
-    document.getElementById("roomInfo");
+const createRoomBtn = document.getElementById("createRoomBtn");
+const joinRoomBtn = document.getElementById("joinRoomBtn");
+const roomInput = document.getElementById("roomInput");
+const roomInfo = document.getElementById("roomInfo");
+const menu = document.getElementById("menu");
 
 let joinedRoom = false;
-
-console.log("SCRIPT VERSION FINAL");
 
 let x = 100;
 let y = 100;
@@ -26,30 +19,23 @@ const keys = {};
 const otherPlayers = {};
 const hpBars = {};
 
-// 내 체력바
 let myHp = 100;
 
+// 내 체력바
 const myHpBar = document.createElement("div");
 myHpBar.style.width = "50px";
 myHpBar.style.height = "6px";
 myHpBar.style.background = "lime";
 myHpBar.style.position = "absolute";
 myHpBar.style.borderRadius = "3px";
-
 document.body.appendChild(myHpBar);
 
-// 키 입력
-document.addEventListener("keydown", (e) => {
-    keys[e.key.toLowerCase()] = true;
-});
+// ================= 키 =================
+document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
 
-document.addEventListener("keyup", (e) => {
-    keys[e.key.toLowerCase()] = false;
-});
-
-// 이동
+// ================= 이동 =================
 function gameLoop() {
-
     if (dead) return;
 
     if (keys["w"]) y -= speed;
@@ -60,7 +46,6 @@ function gameLoop() {
     player.style.left = x + "px";
     player.style.top = y + "px";
 
-    // 내 체력바 위치
     myHpBar.style.left = x + "px";
     myHpBar.style.top = (y - 12) + "px";
 
@@ -68,12 +53,10 @@ function gameLoop() {
 
     requestAnimationFrame(gameLoop);
 }
-
 gameLoop();
 
-// 총알 생성
+// ================= 총알 =================
 function createBullet(sx, sy, tx, ty, color) {
-
     const bullet = document.createElement("div");
 
     bullet.style.width = "10px";
@@ -89,14 +72,12 @@ function createBullet(sx, sy, tx, ty, color) {
 
     const dx = tx - sx;
     const dy = ty - sy;
-
     const len = Math.sqrt(dx * dx + dy * dy);
 
     const vx = (dx / len) * 10;
     const vy = (dy / len) * 10;
 
     function move() {
-
         let bx = parseFloat(bullet.style.left);
         let by = parseFloat(bullet.style.top);
 
@@ -107,10 +88,8 @@ function createBullet(sx, sy, tx, ty, color) {
         bullet.style.top = by + "px";
 
         if (
-            bx < -100 ||
-            bx > window.innerWidth + 100 ||
-            by < -100 ||
-            by > window.innerHeight + 100
+            bx < -100 || bx > window.innerWidth + 100 ||
+            by < -100 || by > window.innerHeight + 100
         ) {
             bullet.remove();
             return;
@@ -122,10 +101,9 @@ function createBullet(sx, sy, tx, ty, color) {
     move();
 }
 
-// 발사
+// ================= 발사 =================
 document.addEventListener("click", (e) => {
-
-    if (dead) return;
+    if (dead || !joinedRoom) return;
 
     const sx = x + 25;
     const sy = y + 25;
@@ -138,13 +116,7 @@ document.addEventListener("click", (e) => {
     const vx = (dx / len) * 10;
     const vy = (dy / len) * 10;
 
-    createBullet(
-        sx,
-        sy,
-        e.clientX,
-        e.clientY,
-        "yellow"
-    );
+    createBullet(sx, sy, e.clientX, e.clientY, "yellow");
 
     socket.emit("shoot", {
         startX: sx,
@@ -154,15 +126,13 @@ document.addEventListener("click", (e) => {
     });
 });
 
-// 플레이어 동기화
+// ================= 플레이어 동기화 =================
 socket.on("players", (players) => {
 
     for (const id in players) {
-
         if (id === socket.id) continue;
 
         if (!otherPlayers[id]) {
-
             const div = document.createElement("div");
 
             div.style.width = "50px";
@@ -172,22 +142,15 @@ socket.on("players", (players) => {
             div.style.position = "absolute";
 
             document.body.appendChild(div);
-
             otherPlayers[id] = div;
         }
 
-        otherPlayers[id].style.left =
-            players[id].x + "px";
-
-        otherPlayers[id].style.top =
-            players[id].y + "px";
+        otherPlayers[id].style.left = players[id].x + "px";
+        otherPlayers[id].style.top = players[id].y + "px";
     }
 
-    // 나간 플레이어 제거
     for (const id in otherPlayers) {
-
         if (!players[id]) {
-
             otherPlayers[id].remove();
             delete otherPlayers[id];
 
@@ -199,25 +162,18 @@ socket.on("players", (players) => {
     }
 });
 
-// HP 업데이트
+// ================= HP =================
 socket.on("hpUpdate", (hpData) => {
 
-    // 내 체력
     if (hpData[socket.id] !== undefined) {
-
         myHp = hpData[socket.id];
-
-        myHpBar.style.width =
-            ((myHp / 100) * 50) + "px";
+        myHpBar.style.width = ((myHp / 100) * 50) + "px";
     }
 
-    // 다른 플레이어 체력
     for (const id in hpData) {
-
         if (id === socket.id) continue;
 
         if (!hpBars[id]) {
-
             const bar = document.createElement("div");
 
             bar.style.width = "50px";
@@ -227,27 +183,21 @@ socket.on("hpUpdate", (hpData) => {
             bar.style.borderRadius = "3px";
 
             document.body.appendChild(bar);
-
             hpBars[id] = bar;
         }
 
-        hpBars[id].style.width =
-            ((hpData[id] / 100) * 50) + "px";
+        hpBars[id].style.width = ((hpData[id] / 100) * 50) + "px";
 
         if (otherPlayers[id]) {
-
-            hpBars[id].style.left =
-                otherPlayers[id].style.left;
-
+            hpBars[id].style.left = otherPlayers[id].style.left;
             hpBars[id].style.top =
                 (parseInt(otherPlayers[id].style.top) - 12) + "px";
         }
     }
 });
 
-// 다른 플레이어 총알
+// ================= 총알 동기화 =================
 socket.on("shoot", (data) => {
-
     createBullet(
         data.startX,
         data.startY,
@@ -257,20 +207,14 @@ socket.on("shoot", (data) => {
     );
 });
 
-// 죽음
+// ================= 죽음 =================
 socket.on("dead", () => {
-
     if (dead) return;
 
     dead = true;
-
     myHpBar.style.display = "none";
 
-    console.log("DEAD EVENT RECEIVED");
-
     const deathScreen = document.createElement("div");
-
-    deathScreen.id = "deathScreen";
 
     deathScreen.style.position = "fixed";
     deathScreen.style.top = "0";
@@ -289,87 +233,48 @@ socket.on("dead", () => {
     deathScreen.innerHTML = `
         <div>YOU DIED</div>
         <button id="respawnBtn"
-            style="
-                margin-top:20px;
-                padding:12px 24px;
-                font-size:24px;
-                cursor:pointer;
-            ">
+            style="margin-top:20px;padding:12px 24px;font-size:24px;">
             Respawn
         </button>
     `;
 
     document.body.appendChild(deathScreen);
 
-    document
-        .getElementById("respawnBtn")
-        .addEventListener("click", () => {
-            location.reload();
-        });
+    document.getElementById("respawnBtn").onclick = () => {
+        location.reload();
+    };
 });
-// ======================
-// 방 생성
-// ======================
 
+// ================= 방 생성 =================
 createRoomBtn.addEventListener("click", () => {
-
     socket.emit("createRoom");
-
 });
 
-// ======================
-// 방 참가
-// ======================
-
+// ================= 방 참가 =================
 joinRoomBtn.addEventListener("click", () => {
+    const code = roomInput.value.trim();
+    if (!code) return;
 
-    const roomCode =
-        roomInput.value.trim();
-
-    if (!roomCode) return;
-
-    socket.emit("joinRoom", roomCode);
-
+    socket.emit("joinRoom", code);
 });
 
-// ======================
-// 방 생성 성공
-// ======================
-
-socket.on("roomCreated", (roomCode) => {
-
+// ================= 방 생성 성공 =================
+socket.on("roomCreated", (code) => {
     joinedRoom = true;
+    roomInfo.innerHTML = "방 코드: " + code;
 
-    roomInfo.innerHTML =
-        "내 방 번호 : " + roomCode;
-
-    document.getElementById("menu")
-        .style.display = "none";
-
+    // 메뉴 숨기지 않음 (중요 수정)
 });
 
-// ======================
-// 방 참가 성공
-// ======================
-
-socket.on("roomJoined", (roomCode) => {
-
+// ================= 방 참가 성공 =================
+socket.on("roomJoined", (code) => {
     joinedRoom = true;
+    roomInfo.innerHTML = "참가: " + code;
 
-    roomInfo.innerHTML =
-        "참가한 방 : " + roomCode;
-
-    document.getElementById("menu")
-        .style.display = "none";
-
+    // 메뉴 숨기지 않음
 });
 
-// ======================
-// 방 없음
-// ======================
-
+// ================= 방 실패 =================
 socket.on("roomNotFound", () => {
-
-    alert("방을 찾을 수 없음");
-
+    alert("방 없음");
 });
