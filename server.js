@@ -88,15 +88,15 @@ setInterval(() => {
                 delete bullets[id];
 
                 // 죽음 처리
-                if (HP[pid] <= 0) {
-                    HP[pid] = 0;
+            if (HP[pid] <= 0) {
 
-                    delete players[pid];
-                    delete HP[pid];
+             io.to(pid).emit("dead");
 
-                    io.to(pid).emit("dead");
-                }
+             HP[pid] = 0;
 
+             delete players[pid];
+             delete HP[pid];
+}
                 break;
             }
         }
