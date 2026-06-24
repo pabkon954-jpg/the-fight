@@ -251,7 +251,15 @@ socket.on("dead", () => {
     if (dead) return;
     dead = true;
 
-    myHpBar.style.display = "none";
+    myHpBar.remove(); // 🔥 이게 더 확실함
+
+    for (const id in hpBars) {
+        hpBars[id].remove();
+    }
+
+    for (const id in otherPlayers) {
+        otherPlayers[id].remove();
+    }
 
     const screen = document.createElement("div");
     screen.style.position = "fixed";
