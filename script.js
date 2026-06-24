@@ -13,6 +13,18 @@ const keys = {};
 const otherPlayers = {};
 const hpBars = {};
 
+// 내 체력바
+let myHp = 100;
+
+const myHpBar = document.createElement("div");
+myHpBar.style.width = "50px";
+myHpBar.style.height = "6px";
+myHpBar.style.background = "lime";
+myHpBar.style.position = "absolute";
+myHpBar.style.borderRadius = "3px";
+
+document.body.appendChild(myHpBar);
+
 // 키 입력
 document.addEventListener("keydown", (e) => {
     keys[e.key.toLowerCase()] = true;
@@ -34,6 +46,10 @@ function gameLoop() {
 
     player.style.left = x + "px";
     player.style.top = y + "px";
+
+    // 내 체력바 위치
+    myHpBar.style.left = x + "px";
+    myHpBar.style.top = (y - 12) + "px";
 
     socket.emit("move", { x, y });
 
@@ -170,9 +186,19 @@ socket.on("players", (players) => {
     }
 });
 
-// HP
+// HP 업데이트
 socket.on("hpUpdate", (hpData) => {
 
+    // 내 체력
+    if (hpData[socket.id] !== undefined) {
+
+        myHp = hpData[socket.id];
+
+        myHpBar.style.width =
+            ((myHp / 100) * 50) + "px";
+    }
+
+    // 다른 플레이어 체력
     for (const id in hpData) {
 
         if (id === socket.id) continue;
@@ -192,11 +218,9 @@ socket.on("hpUpdate", (hpData) => {
             hpBars[id] = bar;
         }
 
-        // 체력바 길이 (최대 50px)
         hpBars[id].style.width =
             ((hpData[id] / 100) * 50) + "px";
 
-        // 플레이어 머리 위
         if (otherPlayers[id]) {
 
             hpBars[id].style.left =
@@ -226,6 +250,8 @@ socket.on("dead", () => {
     if (dead) return;
 
     dead = true;
+
+    myHpBar.style.display = "none";
 
     console.log("DEAD EVENT RECEIVED");
 
