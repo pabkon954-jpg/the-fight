@@ -9,20 +9,6 @@ app.get("/", (req, res) => {
     res.sendFile(__dirname + "/index.html");
 });
 
-// ⭐ 디버그용 임시 라우트: 서버가 실제로 보고 있는 파일 목록을 확인
-app.get("/debug-files", (req, res) => {
-    const fs = require("fs");
-    try {
-        const files = fs.readdirSync(__dirname);
-        res.json({
-            dirname: __dirname,
-            files: files
-        });
-    } catch (err) {
-        res.json({ error: err.message });
-    }
-});
-
 // ================= CHARACTERS (서버 기준 스탯) =================
 const CHARACTERS = {
     warrior: { name: "전사", hp: 120, speed: 4, bulletSpeed: 8, color: "crimson" },
@@ -34,7 +20,12 @@ const MAX_PLAYERS = 4;
 // ================= MAP =================
 const MAP_WIDTH = 2000;
 const MAP_HEIGHT = 2000;
-const PLAYER_SIZE = 50; // 플레이어 div 한 변 길이 (px)
+const PLAYER_SIZE = 50;
+
+// ================= GAME RULES =================
+const STARTING_LIVES = 3;
+const COUNTDOWN_SECONDS = 3;
+const ROUND_END_DELAY_MS = 3000; // 라운드 종료 후 결과 보여주는 시간
 
 const rooms = {};
 
@@ -42,7 +33,15 @@ function createRoomCode() {
     return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
-// 클라이언트로 보낼 로비용 플레이어 목록 (필요한 정보만 추려서)
+function randomSpawnPoint() {
+    const margin = 100; // 벽에 너무 붙어서 스폰되지 않도록 여유
+    return {
+        x: margin + Math.random() * (MAP_WIDTH - margin * 2 - PLAYER_SIZE),
+        y: margin + Math.random() * (MAP_HEIGHT - margin * 2 - PLAYER_SIZE)
+    };
+}
+
+// 클라이언트로 보낼 로비용 플레이어 목록
 function getLobbyPlayers(room) {
     const list = {};
     for (const id in room.players) {
@@ -66,6 +65,124 @@ function broadcastLobby(code) {
     });
 }
 
+// 현재 방 플레이어들의 公개용 상태 스냅샷
+function getPlayersSnapshot(room) {
+    const snap = {};
+    for (const id in room.players) {
+        const p = room.players[id];
+        snap[id] = {
+            x: p.x,
+            y: p.y,
+            hp: p.hp,
+            maxHp: p.maxHp,
+            lives: p.lives,
+            alive: p.alive,       // 이번 라운드에서 살아있는지
+            eliminated: p.eliminated // 목숨 0 -> 게임에서 완전 탈락
+        };
+    }
+    return snap;
+}
+
+function broadcastPlayers(code) {
+    const room = rooms[code];
+    if (!room) return;
+    io.to(code).emit("players", getPlayersSnapshot(room));
+}
+
+// ================= ROUND START =================
+function startRound(code) {
+    const room = rooms[code];
+    if (!room) return;
+
+    room.bullets = {};
+    room.roundPhase = "countdown"; // "countdown" | "fighting" | "roundEnd"
+
+    const activeIds = Object.keys(room.players).filter(id => !room.players[id].eliminated);
+
+    activeIds.forEach(id => {
+        const p = room.players[id];
+        const charData = CHARACTERS[p.characterId];
+        const spawn = randomSpawnPoint();
+
+        p.x = spawn.x;
+        p.y = spawn.y;
+        p.hp = charData.hp;
+        p.maxHp = charData.hp;
+        p.alive = true;
+    });
+
+    io.to(code).emit("roundStarting", {
+        players: getPlayersSnapshot(room),
+        countdown: COUNTDOWN_SECONDS
+    });
+
+    let remaining = COUNTDOWN_SECONDS;
+
+    if (room.countdownTimer) clearInterval(room.countdownTimer);
+
+    room.countdownTimer = setInterval(() => {
+        remaining -= 1;
+
+        if (remaining > 0) {
+            io.to(code).emit("countdownTick", remaining);
+        } else {
+            clearInterval(room.countdownTimer);
+            room.countdownTimer = null;
+            room.roundPhase = "fighting";
+            io.to(code).emit("roundFightStart");
+        }
+    }, 1000);
+}
+
+// ================= ROUND END CHECK =================
+function checkRoundEnd(code) {
+    const room = rooms[code];
+    if (!room || room.roundPhase !== "fighting") return;
+
+    const activeIds = Object.keys(room.players).filter(id => !room.players[id].eliminated);
+    const aliveIds = activeIds.filter(id => room.players[id].alive);
+
+    if (aliveIds.length > 1) return; // 아직 라운드 진행 중
+
+    room.roundPhase = "roundEnd";
+
+    // 이 라운드의 승자 (혼자 살아남은 사람, 또는 동시에 0명이면 없음)
+    const roundWinnerId = aliveIds[0] || null;
+
+    // 목숨 0이 된 사람 확인 -> 게임에서 완전 탈락 처리
+    activeIds.forEach(id => {
+        const p = room.players[id];
+        if (p.lives <= 0) {
+            p.eliminated = true;
+        }
+    });
+
+    const remainingPlayers = Object.keys(room.players).filter(id => !room.players[id].eliminated);
+
+    io.to(code).emit("roundEnd", {
+        roundWinnerId,
+        players: getPlayersSnapshot(room)
+    });
+
+    // 게임 전체 종료 조건: 탈락하지 않은 사람이 1명 이하
+    if (remainingPlayers.length <= 1) {
+        room.state = "ended";
+        setTimeout(() => {
+            io.to(code).emit("gameOver", {
+                winnerId: remainingPlayers[0] || null
+            });
+        }, ROUND_END_DELAY_MS);
+        return;
+    }
+
+    // 다음 라운드 자동 시작
+    setTimeout(() => {
+        if (rooms[code] && rooms[code].state === "playing") {
+            startRound(code);
+        }
+    }, ROUND_END_DELAY_MS);
+}
+
 io.on("connection", (socket) => {
 
     socket.roomCode = null;
@@ -80,9 +197,11 @@ io.on("connection", (socket) => {
 
         rooms[code] = {
             state: "waiting", // "waiting" | "playing" | "ended"
+            roundPhase: null,  // "countdown" | "fighting" | "roundEnd"
             hostId: socket.id,
             players: {},
-            bullets: {}
+            bullets: {},
+            countdownTimer: null
         };
 
         socket.join(code);
@@ -91,8 +210,12 @@ io.on("connection", (socket) => {
         rooms[code].players[socket.id] = {
             x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2,
             hp: 100,
+            maxHp: 100,
             characterId: null,
-            ready: false
+            ready: false,
+            lives: STARTING_LIVES,
+            alive: true,
+            eliminated: false
         };
 
         socket.emit("roomCreated", code);
@@ -116,8 +239,12 @@ io.on("connection", (socket) => {
         room.players[socket.id] = {
             x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2,
             hp: 100,
+            maxHp: 100,
             characterId: null,
-            ready: false
+            ready: false,
+            lives: STARTING_LIVES,
+            alive: true,
+            eliminated: false
         };
 
         socket.emit("roomJoined", code);
@@ -133,7 +260,7 @@ io.on("connection", (socket) => {
         const player = room.players[socket.id];
         if (!player) return;
 
-        if (!CHARACTERS[characterId]) return; // 존재하지 않는 캐릭터 id 방어
+        if (!CHARACTERS[characterId]) return;
 
         player.characterId = characterId;
         player.ready = true;
@@ -147,17 +274,14 @@ io.on("connection", (socket) => {
         const room = rooms[socket.roomCode];
         if (!room || room.state !== "waiting") return;
 
-        // 방장만 시작 가능
         if (socket.id !== room.hostId) return;
 
         const ids = Object.keys(room.players);
 
-        // 최소 2명 이상
         if (ids.length < 2) {
             return socket.emit("startFailed", "최소 2명이 필요합니다.");
         }
 
-        // 전원 캐릭터 선택 완료 확인
         const allReady = ids.every(id => room.players[id].ready);
         if (!allReady) {
             return socket.emit("startFailed", "모든 플레이어가 캐릭터를 선택해야 합니다.");
@@ -165,38 +289,42 @@ io.on("connection", (socket) => {
 
         room.state = "playing";
 
-        // 스탯 기반으로 초기화 (맵 중앙 근처에 서로 겹치지 않게 배치)
-        ids.forEach((id, index) => {
+        // 목숨/탈락 상태 초기화
+        ids.forEach(id => {
             const p = room.players[id];
-            const charData = CHARACTERS[p.characterId];
-
-            p.x = MAP_WIDTH / 2 + index * 100 - 150;
-            p.y = MAP_HEIGHT / 2;
-            p.hp = charData.hp;
-            p.maxHp = charData.hp;
+            p.lives = STARTING_LIVES;
+            p.eliminated = false;
+            p.alive = true;
         });
 
         io.to(socket.roomCode).emit("gameStarted", {
-            players: room.players,
+            players: getPlayersSnapshot(room),
             characters: CHARACTERS,
-            map: { width: MAP_WIDTH, height: MAP_HEIGHT }
+            map: { width: MAP_WIDTH, height: MAP_HEIGHT },
+            startingLives: STARTING_LIVES
         });
+
+        // 약간의 여유를 두고 첫 라운드 시작 (클라이언트가 화면 전환할 시간)
+        setTimeout(() => startRound(socket.roomCode), 300);
     });
 
     // ================= MOVE =================
     socket.on("move", (data) => {
 
         const room = rooms[socket.roomCode];
-        if (!room || room.state !== "playing" || !room.players[socket.id]) return;
+        if (!room || room.state !== "playing") return;
+        if (room.roundPhase !== "fighting") return; // ⭐ 카운트다운 중에는 이동 무시
 
-        // ⭐ 맵 경계 안으로 좌표 고정 (clamp)
+        const p = room.players[socket.id];
+        if (!p || !p.alive || p.eliminated) return;
+
         const clampedX = Math.max(0, Math.min(MAP_WIDTH - PLAYER_SIZE, data.x));
         const clampedY = Math.max(0, Math.min(MAP_HEIGHT - PLAYER_SIZE, data.y));
 
-        room.players[socket.id].x = clampedX;
-        room.players[socket.id].y = clampedY;
+        p.x = clampedX;
+        p.y = clampedY;
 
-        io.to(socket.roomCode).emit("players", room.players);
+        broadcastPlayers(socket.roomCode);
     });
 
     // ================= SHOOT =================
@@ -204,8 +332,12 @@ io.on("connection", (socket) => {
 
         const room = rooms[socket.roomCode];
         if (!room || room.state !== "playing") return;
+        if (room.roundPhase !== "fighting") return; // ⭐ 카운트다운 중에는 발사 무시
 
-        const id = data.id; // 클라이언트가 만든 id를 그대로 사용
+        const shooter = room.players[socket.id];
+        if (!shooter || !shooter.alive || shooter.eliminated) return;
+
+        const id = data.id;
 
         room.bullets[id] = {
             owner: socket.id,
@@ -228,14 +360,15 @@ io.on("connection", (socket) => {
         const room = rooms[code];
         if (!room) return;
 
+        const wasInRoom = !!room.players[socket.id];
         delete room.players[socket.id];
 
         if (Object.keys(room.players).length === 0) {
+            if (room.countdownTimer) clearInterval(room.countdownTimer);
             delete rooms[code];
             return;
         }
 
-        // 방장이 나가면 다음 사람에게 방장 위임
         if (room.hostId === socket.id) {
             room.hostId = Object.keys(room.players)[0];
         }
@@ -243,19 +376,24 @@ io.on("connection", (socket) => {
         if (room.state === "waiting") {
             broadcastLobby(code);
         } else if (room.state === "playing") {
-            io.to(code).emit("players", room.players);
+            broadcastPlayers(code);
+            if (wasInRoom && room.roundPhase === "fighting") {
+                checkRoundEnd(code);
+            }
         }
     });
 });
 
 
-// ================= GAME LOOP (PLAYING 상태인 방만 처리) =================
+// ================= GAME LOOP (PLAYING 상태 + 전투 중인 방만 처리) =================
 setInterval(() => {
 
     for (const code in rooms) {
 
         const room = rooms[code];
-        if (room.state !== "playing") continue;
+        if (room.state !== "playing" || room.roundPhase !== "fighting") continue;
+
+        let hit = false;
 
         for (const bid in room.bullets) {
 
@@ -264,7 +402,6 @@ setInterval(() => {
             b.x += b.vx;
             b.y += b.vy;
 
-            // ⭐ 총알이 맵 밖으로 나가면 제거
             if (b.x < 0 || b.x > MAP_WIDTH || b.y < 0 || b.y > MAP_HEIGHT) {
                 delete room.bullets[bid];
                 continue;
@@ -272,9 +409,10 @@ setInterval(() => {
 
             for (const pid in room.players) {
 
-                if (pid === b.owner) continue;
-
                 const p = room.players[pid];
+
+                if (pid === b.owner) continue;
+                if (!p.alive || p.eliminated) continue;
 
                 const dx = (p.x + 25) - b.x;
                 const dy = (p.y + 25) - b.y;
@@ -286,10 +424,12 @@ setInterval(() => {
                     p.hp -= 10;
 
                     delete room.bullets[bid];
+                    hit = true;
 
                     if (p.hp <= 0) {
-                        io.to(pid).emit("dead");
-                        delete room.players[pid];
+                        p.alive = false;
+                        p.lives -= 1;
+                        io.to(pid).emit("dead", { livesLeft: p.lives });
                     }
 
                     break;
@@ -297,17 +437,11 @@ setInterval(() => {
             }
         }
 
-        const hpData = {};
-        for (const pid in room.players) hpData[pid] = room.players[pid].hp;
-        io.to(code).emit("hpUpdate", hpData);
-
-        // 마지막 생존자 1명이면 게임 종료
-        const remaining = Object.keys(room.players);
-        if (room.state === "playing" && remaining.length <= 1) {
-            room.state = "ended";
-            io.to(code).emit("gameOver", {
-                winnerId: remaining[0] || null
-            });
+        if (hit) {
+            broadcastPlayers(code);
+            checkRoundEnd(code);
+        } else {
+            broadcastPlayers(code);
         }
     }
 

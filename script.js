@@ -20,7 +20,7 @@ const CHARACTER_DISPLAY = {
     scout:   { name: "스카우트", color: "deepskyblue", statsText: "체력 80 · 속도 빠름" }
 };
 
-// ================= UI =================
+// ================= TOP UI (방 코드) =================
 const roomTop = document.createElement("div");
 roomTop.style.position = "fixed";
 roomTop.style.top = "10px";
@@ -30,12 +30,80 @@ roomTop.style.fontSize = "20px";
 roomTop.style.zIndex = "5";
 document.body.appendChild(roomTop);
 
+// ================= LIVES (하트) UI =================
+const livesBar = document.createElement("div");
+livesBar.style.position = "fixed";
+livesBar.style.top = "10px";
+livesBar.style.left = "50%";
+livesBar.style.transform = "translateX(-50%)";
+livesBar.style.fontSize = "32px";
+livesBar.style.zIndex = "5";
+livesBar.style.display = "none";
+livesBar.style.letterSpacing = "4px";
+document.body.appendChild(livesBar);
+
+let myLives = 3;
+let startingLives = 3;
+
+function renderLives() {
+    let hearts = "";
+    for (let i = 0; i < startingLives; i++) {
+        hearts += i < myLives ? "❤️" : "🖤";
+    }
+    livesBar.innerText = hearts;
+}
+
+// ================= COUNTDOWN UI =================
+const countdownEl = document.createElement("div");
+countdownEl.style.position = "fixed";
+countdownEl.style.inset = "0";
+countdownEl.style.display = "none";
+countdownEl.style.justifyContent = "center";
+countdownEl.style.alignItems = "center";
+countdownEl.style.fontSize = "120px";
+countdownEl.style.color = "white";
+countdownEl.style.fontWeight = "bold";
+countdownEl.style.textShadow = "0 0 20px rgba(0,0,0,0.8)";
+countdownEl.style.zIndex = "25";
+countdownEl.style.pointerEvents = "none";
+document.body.appendChild(countdownEl);
+
+// ================= ROUND RESULT UI =================
+const roundResultEl = document.createElement("div");
+roundResultEl.style.position = "fixed";
+roundResultEl.style.top = "70px";
+roundResultEl.style.left = "50%";
+roundResultEl.style.transform = "translateX(-50%)";
+roundResultEl.style.fontSize = "24px";
+roundResultEl.style.color = "white";
+roundResultEl.style.background = "rgba(0,0,0,0.6)";
+roundResultEl.style.padding = "10px 20px";
+roundResultEl.style.borderRadius = "8px";
+roundResultEl.style.display = "none";
+roundResultEl.style.zIndex = "5";
+document.body.appendChild(roundResultEl);
+
+// ================= SPECTATOR UI =================
+const spectatorEl = document.createElement("div");
+spectatorEl.style.position = "fixed";
+spectatorEl.style.bottom = "20px";
+spectatorEl.style.left = "50%";
+spectatorEl.style.transform = "translateX(-50%)";
+spectatorEl.style.fontSize = "20px";
+spectatorEl.style.color = "white";
+spectatorEl.style.background = "rgba(0,0,0,0.6)";
+spectatorEl.style.padding = "8px 16px";
+spectatorEl.style.borderRadius = "8px";
+spectatorEl.style.display = "none";
+spectatorEl.style.zIndex = "5";
+spectatorEl.innerText = "관전 중... 다음 라운드를 기다려주세요";
+document.body.appendChild(spectatorEl);
+
 // ================= MAP / WORLD =================
 let MAP_WIDTH = 2000;
 let MAP_HEIGHT = 2000;
 const PLAYER_SIZE = 50;
 
-// 맵 경계를 보여주는 배경 요소 (월드 좌표 기준으로 그려진 큰 사각형)
 const mapEl = document.createElement("div");
 mapEl.style.position = "absolute";
 mapEl.style.left = "0px";
@@ -47,7 +115,6 @@ mapEl.style.zIndex = "0";
 mapEl.style.display = "none";
 document.body.appendChild(mapEl);
 
-// 카메라: 화면에 보이는 월드의 좌상단 좌표
 let camX = 0;
 let camY = 0;
 
@@ -56,15 +123,16 @@ function updateCamera() {
     camY = y + PLAYER_SIZE / 2 - window.innerHeight / 2;
 }
 
-// 월드 좌표 → 화면 좌표 변환 후 엘리먼트에 적용
 function placeAtWorld(el, worldX, worldY) {
     el.style.left = (worldX - camX) + "px";
     el.style.top = (worldY - camY) + "px";
 }
 
 // ================= STATE =================
-let joinedRoom = false;   // 게임이 실제로 시작된 상태인지 (로비 X, 게임 O)
-let dead = false;
+let joinedRoom = false;     // 게임이 시작된 상태(로비 X)
+let canMove = false;        // 카운트다운이 끝나고 전투 중인지
+let isAlive = true;         // 이번 라운드에서 살아있는지 (죽으면 관전)
+let isEliminated = false;   // 목숨 0 -> 게임에서 완전 탈락
 
 let myRoomCode = null;
 let isHost = false;
@@ -72,7 +140,6 @@ let selectedCharacter = null;
 let myCharSpeed = 5;
 let myMaxHp = 100;
 
-// x, y는 "월드 좌표" (맵 안에서의 실제 위치)
 let x = 100;
 let y = 100;
 
@@ -107,29 +174,27 @@ document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 function loop() {
     requestAnimationFrame(loop);
 
-    if (!joinedRoom || dead) return;
+    if (!joinedRoom) return;
 
-    if (keys["w"]) y -= myCharSpeed;
-    if (keys["s"]) y += myCharSpeed;
-    if (keys["a"]) x -= myCharSpeed;
-    if (keys["d"]) x += myCharSpeed;
+    // ⭐ 카운트다운 중이거나 죽어서 관전 중이면 이동 불가
+    if (canMove && isAlive && !isEliminated) {
+        if (keys["w"]) y -= myCharSpeed;
+        if (keys["s"]) y += myCharSpeed;
+        if (keys["a"]) x -= myCharSpeed;
+        if (keys["d"]) x += myCharSpeed;
 
-    // ⭐ 클라이언트 쪽에서도 맵 경계 밖으로 못 나가게 고정
-    // (서버가 최종 권위를 갖지만, 로컬에서도 막아야 벽을 넘는 것처럼 보이는 깜빡임이 없음)
-    x = Math.max(0, Math.min(MAP_WIDTH - PLAYER_SIZE, x));
-    y = Math.max(0, Math.min(MAP_HEIGHT - PLAYER_SIZE, y));
+        x = Math.max(0, Math.min(MAP_WIDTH - PLAYER_SIZE, x));
+        y = Math.max(0, Math.min(MAP_HEIGHT - PLAYER_SIZE, y));
 
-    // ⭐ 카메라는 항상 나를 중심으로
+        socket.emit("move", { x, y });
+    }
+
     updateCamera();
 
-    // 내 캐릭터는 항상 화면 중앙 근처 (카메라가 나를 따라가므로 결과적으로 고정된 위치)
     placeAtWorld(player, x, y);
     placeAtWorld(myHpBar, x, y - 12);
-
-    // 맵 배경도 카메라에 맞춰 이동
     placeAtWorld(mapEl, 0, 0);
 
-    // 다른 플레이어들도 카메라 변경에 맞춰 다시 위치 갱신
     for (const id in otherPlayers) {
         const op = otherPlayers[id];
         placeAtWorld(op.el, op.worldX, op.worldY);
@@ -138,13 +203,10 @@ function loop() {
         }
     }
 
-    // 총알들도 카메라 변경에 맞춰 다시 위치 갱신
     for (const id in bullets) {
         const b = bullets[id];
         placeAtWorld(b.el, b.worldX, b.worldY);
     }
-
-    socket.emit("move", { x, y });
 }
 loop();
 
@@ -183,14 +245,13 @@ function createBullet(id, startWorldX, startWorldY, targetWorldX, targetWorldY, 
 
     function move() {
 
-        if (!bullets[id] || dead) return;
+        if (!bullets[id]) return;
 
         bulletState.worldX += bulletState.vx;
         bulletState.worldY += bulletState.vy;
 
         placeAtWorld(bulletEl, bulletState.worldX, bulletState.worldY);
 
-        // 맵 경계를 벗어나면 제거 (서버와 동일한 기준)
         if (
             bulletState.worldX < -50 || bulletState.worldX > MAP_WIDTH + 50 ||
             bulletState.worldY < -50 || bulletState.worldY > MAP_HEIGHT + 50
@@ -206,12 +267,18 @@ function createBullet(id, startWorldX, startWorldY, targetWorldX, targetWorldY, 
     move();
 }
 
+function clearAllBullets() {
+    for (const id in bullets) {
+        bullets[id].el.remove();
+        delete bullets[id];
+    }
+}
+
 // ================= SHOOT =================
 document.addEventListener("click", (e) => {
 
-    if (!joinedRoom || dead) return;
+    if (!joinedRoom || !canMove || !isAlive || isEliminated) return;
 
-    // 클릭한 화면 좌표 → 월드 좌표로 변환 (카메라 오프셋 더하기)
     const targetWorldX = e.clientX + camX;
     const targetWorldY = e.clientY + camY;
 
@@ -240,7 +307,7 @@ document.addEventListener("click", (e) => {
 socket.on("shoot", (data) => {
 
     if (data.owner === socket.id) return;
-    if (!joinedRoom || dead) return;
+    if (!joinedRoom) return;
 
     const targetX = data.x + data.vx * 100;
     const targetY = data.y + data.vy * 100;
@@ -248,14 +315,28 @@ socket.on("shoot", (data) => {
     createBullet(data.id, data.x, data.y, targetX, targetY, "red");
 });
 
-// ================= OTHER PLAYERS =================
+// ================= PLAYERS (위치 + 체력 + 목숨 + 생존 상태 통합) =================
 socket.on("players", players => {
 
-    if (!joinedRoom || dead) return;
+    if (!joinedRoom) return;
+
+    const myData = players[socket.id];
+    if (myData) {
+        myHp = myData.hp;
+        myMaxHp = myData.maxHp || myMaxHp;
+        myHpBar.style.width = Math.max(0, (myHp / myMaxHp) * 50) + "px";
+
+        if (myData.lives !== myLives) {
+            myLives = myData.lives;
+            renderLives();
+        }
+    }
 
     for (const id in players) {
 
         if (id === socket.id) continue;
+
+        const pdata = players[id];
 
         if (!otherPlayers[id]) {
             const div = document.createElement("div");
@@ -269,34 +350,18 @@ socket.on("players", players => {
             otherPlayers[id] = { el: div, worldX: 0, worldY: 0 };
         }
 
-        otherPlayers[id].worldX = players[id].x;
-        otherPlayers[id].worldY = players[id].y;
+        otherPlayers[id].worldX = pdata.x;
+        otherPlayers[id].worldY = pdata.y;
 
-        placeAtWorld(otherPlayers[id].el, players[id].x, players[id].y);
-    }
+        // 죽었거나(관전 중) 탈락한 상대는 화면에서 숨김
+        const shouldShow = pdata.alive && !pdata.eliminated;
+        otherPlayers[id].el.style.display = shouldShow ? "block" : "none";
 
-    for (const id in otherPlayers) {
-        if (!players[id]) {
-            otherPlayers[id].el.remove();
-            delete otherPlayers[id];
+        if (shouldShow) {
+            placeAtWorld(otherPlayers[id].el, pdata.x, pdata.y);
         }
-    }
-});
 
-// ================= HP =================
-socket.on("hpUpdate", hpData => {
-
-    if (!joinedRoom || dead) return;
-
-    if (hpData[socket.id] !== undefined) {
-        myHp = hpData[socket.id];
-        myHpBar.style.width = (myHp / myMaxHp) * 50 + "px";
-    }
-
-    for (const id in hpData) {
-
-        if (id === socket.id) continue;
-
+        // 체력바
         if (!hpBars[id]) {
             const bar = document.createElement("div");
             bar.style.width = "50px";
@@ -309,17 +374,23 @@ socket.on("hpUpdate", hpData => {
             hpBars[id] = bar;
         }
 
-        hpBars[id].style.width = (hpData[id] / 100) * 50 + "px";
+        hpBars[id].style.display = shouldShow ? "block" : "none";
 
-        if (otherPlayers[id]) {
-            placeAtWorld(hpBars[id], otherPlayers[id].worldX, otherPlayers[id].worldY - 12);
+        if (shouldShow) {
+            const maxHp = pdata.maxHp || 100;
+            hpBars[id].style.width = Math.max(0, (pdata.hp / maxHp) * 50) + "px";
+            placeAtWorld(hpBars[id], pdata.x, pdata.y - 12);
         }
     }
 
-    for (const id in hpBars) {
-        if (hpData[id] === undefined) {
-            hpBars[id].remove();
-            delete hpBars[id];
+    for (const id in otherPlayers) {
+        if (!players[id]) {
+            otherPlayers[id].el.remove();
+            delete otherPlayers[id];
+            if (hpBars[id]) {
+                hpBars[id].remove();
+                delete hpBars[id];
+            }
         }
     }
 });
@@ -437,16 +508,18 @@ socket.on("startFailed", (reason) => {
     lobbyMessage.innerText = reason;
 });
 
-// ================= GAME STARTED =================
+// ================= GAME STARTED (맵/캐릭터 초기 세팅, 아직 라운드 시작 전) =================
 socket.on("gameStarted", (data) => {
 
     lobby.style.display = "none";
 
-    // 맵 크기 반영
     if (data.map) {
         MAP_WIDTH = data.map.width;
         MAP_HEIGHT = data.map.height;
     }
+
+    startingLives = data.startingLives || 3;
+    myLives = startingLives;
 
     mapEl.style.width = MAP_WIDTH + "px";
     mapEl.style.height = MAP_HEIGHT + "px";
@@ -454,6 +527,7 @@ socket.on("gameStarted", (data) => {
 
     player.style.display = "block";
     myHpBar.style.display = "block";
+    livesBar.style.display = "block";
 
     const myData = data.players[socket.id];
     const myChar = data.characters[myData.characterId];
@@ -461,29 +535,93 @@ socket.on("gameStarted", (data) => {
     myCharSpeed = myChar.speed;
     myMaxHp = myChar.hp;
 
-    x = myData.x;
-    y = myData.y;
-    myHp = myData.hp;
-
     player.style.background = myChar.color;
-
-    updateCamera();
-    placeAtWorld(player, x, y);
-    placeAtWorld(myHpBar, x, y - 12);
-    placeAtWorld(mapEl, 0, 0);
-
-    myHpBar.style.width = (myHp / myMaxHp) * 50 + "px";
 
     roomTop.innerText = "ROOM: " + myRoomCode;
 
+    renderLives();
+
     joinedRoom = true;
-    dead = false;
+    canMove = false;
+    isAlive = true;
+    isEliminated = false;
+});
+
+// ================= ROUND STARTING (위치 리셋 + 카운트다운 시작) =================
+socket.on("roundStarting", (data) => {
+
+    canMove = false;
+    isAlive = true;
+    spectatorEl.style.display = "none";
+    roundResultEl.style.display = "none";
+
+    clearAllBullets();
+
+    const myData = data.players[socket.id];
+
+    if (myData) {
+        x = myData.x;
+        y = myData.y;
+        myHp = myData.hp;
+        myMaxHp = myData.maxHp;
+        isEliminated = !!myData.eliminated;
+
+        myHpBar.style.width = (myHp / myMaxHp) * 50 + "px";
+
+        updateCamera();
+        placeAtWorld(player, x, y);
+        placeAtWorld(myHpBar, x, y - 12);
+        placeAtWorld(mapEl, 0, 0);
+
+        player.style.display = isEliminated ? "none" : "block";
+        myHpBar.style.display = isEliminated ? "none" : "block";
+
+        if (isEliminated) {
+            spectatorEl.innerText = "탈락했습니다. 게임 종료까지 관전합니다.";
+            spectatorEl.style.display = "block";
+        }
+    }
+
+    countdownEl.style.display = "flex";
+    countdownEl.innerText = data.countdown;
+});
+
+socket.on("countdownTick", (remaining) => {
+    countdownEl.innerText = remaining > 0 ? remaining : "";
+});
+
+socket.on("roundFightStart", () => {
+    countdownEl.style.display = "none";
+    canMove = true;
+});
+
+// ================= ROUND END =================
+socket.on("roundEnd", (data) => {
+
+    canMove = false;
+
+    const winnerLabel = data.roundWinnerId === socket.id ? "당신이 이 라운드에서 승리했습니다!" :
+                         data.roundWinnerId ? "이 라운드는 다른 플레이어가 승리했습니다." :
+                         "이 라운드는 무승부입니다.";
+
+    roundResultEl.innerText = winnerLabel;
+    roundResultEl.style.display = "block";
+
+    const myData = data.players[socket.id];
+    if (myData) {
+        isEliminated = !!myData.eliminated;
+        if (myData.lives !== myLives) {
+            myLives = myData.lives;
+            renderLives();
+        }
+    }
 });
 
 // ================= GAME OVER =================
 socket.on("gameOver", ({ winnerId }) => {
 
     joinedRoom = false;
+    canMove = false;
 
     const isWinner = winnerId === socket.id;
 
@@ -511,52 +649,16 @@ socket.on("gameOver", ({ winnerId }) => {
     document.getElementById("backToMenuBtn").onclick = () => location.reload();
 });
 
-// ================= DEAD =================
-socket.on("dead", () => {
+// ================= DEAD (이번 라운드에서 죽음 -> 관전 전환) =================
+socket.on("dead", ({ livesLeft }) => {
 
-    if (dead) return;
-    dead = true;
-    joinedRoom = false;
+    isAlive = false;
+    myLives = livesLeft;
+    renderLives();
 
     player.style.display = "none";
-    mapEl.style.display = "none";
-    myHpBar.remove();
+    myHpBar.style.display = "none";
 
-    for (const id in hpBars) {
-        hpBars[id].remove();
-        delete hpBars[id];
-    }
-
-    for (const id in otherPlayers) {
-        otherPlayers[id].el.remove();
-        delete otherPlayers[id];
-    }
-
-    for (const id in bullets) {
-        bullets[id].el.remove();
-        delete bullets[id];
-    }
-
-    const screen = document.createElement("div");
-    screen.style.position = "fixed";
-    screen.style.inset = "0";
-    screen.style.background = "rgba(0,0,0,0.9)";
-    screen.style.color = "white";
-    screen.style.display = "flex";
-    screen.style.justifyContent = "center";
-    screen.style.alignItems = "center";
-    screen.style.flexDirection = "column";
-    screen.style.fontSize = "40px";
-    screen.style.zIndex = "30";
-
-    screen.innerHTML = `
-        <div>YOU DIED</div>
-        <button id="respawnBtn" style="margin-top:20px;padding:10px;">
-            Respawn
-        </button>
-    `;
-
-    document.body.appendChild(screen);
-
-    document.getElementById("respawnBtn").onclick = () => location.reload();
+    spectatorEl.innerText = "관전 중... 다음 라운드를 기다려주세요";
+    spectatorEl.style.display = "block";
 });
