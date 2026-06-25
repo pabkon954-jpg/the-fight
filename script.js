@@ -37,7 +37,8 @@ let dead = false;
 let myRoomCode = null;
 let isHost = false;
 let selectedCharacter = null;
-let myCharSpeed = 5; // 캐릭터 스탯 반영 전 기본값
+let myCharSpeed = 5;  // 캐릭터 스탯 반영 전 기본값
+let myMaxHp = 100;     // 캐릭터 스탯 반영 전 기본값 (※ 사용 전에 미리 선언)
 
 let x = 100;
 let y = 100;
@@ -217,8 +218,7 @@ socket.on("hpUpdate", hpData => {
 
     if (hpData[socket.id] !== undefined) {
         myHp = hpData[socket.id];
-        const maxHp = myMaxHp || 100;
-        myHpBar.style.width = (myHp / maxHp) * 50 + "px";
+        myHpBar.style.width = (myHp / myMaxHp) * 50 + "px";
     }
 
     for (const id in hpData) {
@@ -252,8 +252,6 @@ socket.on("hpUpdate", hpData => {
         }
     }
 });
-
-let myMaxHp = 100;
 
 // ================= LOBBY: 캐릭터 카드 렌더링 =================
 function renderCharacterCards() {
