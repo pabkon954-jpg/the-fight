@@ -11,8 +11,9 @@ app.get("/", (req, res) => {
 
 // ================= CHARACTERS (서버 기준 스탯) =================
 const CHARACTERS = {
-    warrior: { name: "전사", hp: 120, speed: 4, bulletSpeed: 8, color: "crimson" },
-    scout:   { name: "스카우트", hp: 80, speed: 7, bulletSpeed: 12, color: "deepskyblue" }
+    warrior: { name: "전사", hp: 120, speed: 4, bulletSpeed: 8, color: "crimson", attackDamage: 10 },
+    scout:   { name: "스카우트", hp: 80, speed: 7, bulletSpeed: 12, color: "deepskyblue", attackDamage: 10 },
+    monkey:  { name: "원숭이", hp: 400, speed: 8, bulletSpeed: 9, color: "#8a5a2b", attackDamage: 10 }
 };
 
 const MAX_PLAYERS = 4;
@@ -339,13 +340,16 @@ io.on("connection", (socket) => {
         if (!shooter || !shooter.alive || shooter.eliminated) return;
 
         const id = data.id;
+        const charData = CHARACTERS[shooter.characterId];
+        const damage = (charData && charData.attackDamage) || 10;
 
         room.bullets[id] = {
             owner: socket.id,
             x: data.startX,
             y: data.startY,
             vx: data.vx,
-            vy: data.vy
+            vy: data.vy,
+            damage: damage
         };
 
         io.to(socket.roomCode).emit("shoot", {
@@ -422,7 +426,7 @@ setInterval(() => {
 
                 if (dist < 20) {
 
-                    p.hp -= 10;
+                    p.hp -= (b.damage || 10);
 
                     delete room.bullets[bid];
                     hit = true;

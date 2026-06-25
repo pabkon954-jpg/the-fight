@@ -14,10 +14,29 @@ const playerListItems = document.getElementById("playerListItems");
 const startBtn = document.getElementById("startBtn");
 const lobbyMessage = document.getElementById("lobbyMessage");
 
+// 캐릭터 얼굴을 표현하는 SVG (게임 화면의 원형 캐릭터 위에도 동일하게 사용)
+function monkeyFaceSVG() {
+    return `
+        <svg viewBox="0 0 100 100" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+            <circle cx="50" cy="50" r="48" fill="#8a5a2b"/>
+            <circle cx="20" cy="32" r="14" fill="#8a5a2b"/>
+            <circle cx="80" cy="32" r="14" fill="#8a5a2b"/>
+            <circle cx="20" cy="32" r="8" fill="#caa172"/>
+            <circle cx="80" cy="32" r="8" fill="#caa172"/>
+            <ellipse cx="50" cy="62" rx="30" ry="26" fill="#e8c9a0"/>
+            <circle cx="36" cy="48" r="6" fill="#2b1a0f"/>
+            <circle cx="64" cy="48" r="6" fill="#2b1a0f"/>
+            <ellipse cx="50" cy="68" rx="10" ry="7" fill="#caa172"/>
+            <path d="M 40 76 Q 50 84 60 76" stroke="#2b1a0f" stroke-width="3" fill="none" stroke-linecap="round"/>
+        </svg>
+    `;
+}
+
 // 서버 CHARACTERS와 id가 일치해야 함 (표시용 정보)
 const CHARACTER_DISPLAY = {
     warrior: { name: "전사", color: "crimson", statsText: "체력 120 · 속도 보통" },
-    scout:   { name: "스카우트", color: "deepskyblue", statsText: "체력 80 · 속도 빠름" }
+    scout:   { name: "스카우트", color: "deepskyblue", statsText: "체력 80 · 속도 빠름" },
+    monkey:  { name: "원숭이", color: "#8a5a2b", statsText: "체력 400 · 속도 매우 빠름", faceSVG: monkeyFaceSVG }
 };
 
 // ================= TOP UI (방 코드) =================
@@ -104,16 +123,7 @@ let MAP_WIDTH = 2000;
 let MAP_HEIGHT = 2000;
 const PLAYER_SIZE = 50;
 
-const mapEl = document.createElement("div");
-mapEl.style.position = "absolute";
-mapEl.style.left = "0px";
-mapEl.style.top = "0px";
-mapEl.style.background = "#1a1a1a";
-mapEl.style.border = "6px solid #555";
-mapEl.style.boxSizing = "border-box";
-mapEl.style.zIndex = "0";
-mapEl.style.display = "none";
-document.body.appendChild(mapEl);
+const mapEl = document.getElementById("mapBackground");
 
 let camX = 0;
 let camY = 0;
@@ -126,6 +136,20 @@ function updateCamera() {
 function placeAtWorld(el, worldX, worldY) {
     el.style.left = (worldX - camX) + "px";
     el.style.top = (worldY - camY) + "px";
+}
+
+// 캐릭터 div에 색/SVG 얼굴을 적용 (내 캐릭터 + 상대 캐릭터 공용)
+function applyCharacterAppearance(el, characterId) {
+    const info = CHARACTER_DISPLAY[characterId];
+    if (!info) return;
+
+    if (info.faceSVG) {
+        el.style.background = "#222";
+        el.innerHTML = info.faceSVG();
+    } else {
+        el.style.background = info.color;
+        el.innerHTML = "";
+    }
 }
 
 // ================= STATE =================
@@ -342,12 +366,18 @@ socket.on("players", players => {
             const div = document.createElement("div");
             div.style.width = "50px";
             div.style.height = "50px";
-            div.style.background = "lime";
             div.style.position = "absolute";
             div.style.borderRadius = "50%";
             div.style.zIndex = "2";
+            div.style.overflow = "hidden";
             document.body.appendChild(div);
-            otherPlayers[id] = { el: div, worldX: 0, worldY: 0 };
+            otherPlayers[id] = { el: div, worldX: 0, worldY: 0, characterId: null };
+        }
+
+        // 캐릭터 정보가 처음 도착했거나 바뀐 경우에만 외형 갱신 (매 프레임 innerHTML 재설정 방지)
+        if (pdata.characterId && otherPlayers[id].characterId !== pdata.characterId) {
+            applyCharacterAppearance(otherPlayers[id].el, pdata.characterId);
+            otherPlayers[id].characterId = pdata.characterId;
         }
 
         otherPlayers[id].worldX = pdata.x;
@@ -406,8 +436,11 @@ function renderCharacterCards() {
         card.className = "char-card";
         card.dataset.charId = charId;
 
+        const swatchInner = info.faceSVG ? info.faceSVG() : "";
+        const swatchStyle = info.faceSVG ? "" : `style="background:${info.color}"`;
+
         card.innerHTML = `
-            <div class="char-swatch" style="background:${info.color}"></div>
+            <div class="char-swatch" ${swatchStyle}>${swatchInner}</div>
             <div class="char-name">${info.name}</div>
             <div class="char-stats">${info.statsText}</div>
         `;
@@ -541,7 +574,7 @@ socket.on("gameStarted", (data) => {
     myCharSpeed = myChar.speed;
     myMaxHp = myChar.hp;
 
-    player.style.background = myChar.color;
+    applyCharacterAppearance(player, myData.characterId);
 
     roomTop.innerText = "ROOM: " + myRoomCode;
 
