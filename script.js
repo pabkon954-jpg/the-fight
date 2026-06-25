@@ -22,13 +22,45 @@ const CHARACTER_DISPLAY = {
 
 // ================= UI =================
 const roomTop = document.createElement("div");
-roomTop.style.position = "absolute";
+roomTop.style.position = "fixed";
 roomTop.style.top = "10px";
 roomTop.style.left = "10px";
 roomTop.style.color = "white";
 roomTop.style.fontSize = "20px";
 roomTop.style.zIndex = "5";
 document.body.appendChild(roomTop);
+
+// ================= MAP / WORLD =================
+let MAP_WIDTH = 2000;
+let MAP_HEIGHT = 2000;
+const PLAYER_SIZE = 50;
+
+// 맵 경계를 보여주는 배경 요소 (월드 좌표 기준으로 그려진 큰 사각형)
+const mapEl = document.createElement("div");
+mapEl.style.position = "absolute";
+mapEl.style.left = "0px";
+mapEl.style.top = "0px";
+mapEl.style.background = "#1a1a1a";
+mapEl.style.border = "6px solid #555";
+mapEl.style.boxSizing = "border-box";
+mapEl.style.zIndex = "0";
+mapEl.style.display = "none";
+document.body.appendChild(mapEl);
+
+// 카메라: 화면에 보이는 월드의 좌상단 좌표
+let camX = 0;
+let camY = 0;
+
+function updateCamera() {
+    camX = x + PLAYER_SIZE / 2 - window.innerWidth / 2;
+    camY = y + PLAYER_SIZE / 2 - window.innerHeight / 2;
+}
+
+// 월드 좌표 → 화면 좌표 변환 후 엘리먼트에 적용
+function placeAtWorld(el, worldX, worldY) {
+    el.style.left = (worldX - camX) + "px";
+    el.style.top = (worldY - camY) + "px";
+}
 
 // ================= STATE =================
 let joinedRoom = false;   // 게임이 실제로 시작된 상태인지 (로비 X, 게임 O)
@@ -37,21 +69,22 @@ let dead = false;
 let myRoomCode = null;
 let isHost = false;
 let selectedCharacter = null;
-let myCharSpeed = 5;  // 캐릭터 스탯 반영 전 기본값
-let myMaxHp = 100;     // 캐릭터 스탯 반영 전 기본값 (※ 사용 전에 미리 선언)
+let myCharSpeed = 5;
+let myMaxHp = 100;
 
+// x, y는 "월드 좌표" (맵 안에서의 실제 위치)
 let x = 100;
 let y = 100;
 
-let bulletSeq = 0; // 총알 고유 id를 위한 카운터
+let bulletSeq = 0;
 
 const keys = {};
-const otherPlayers = {};
+const otherPlayers = {};   // { id: { el, worldX, worldY } }
 const hpBars = {};
-const bullets = {};
+const bullets = {};        // { id: { el, worldX, worldY, vx, vy } }
 
-// 게임 화면 요소들은 로비/메뉴 단계에서는 보이지 않도록 처음에 숨김
 player.style.display = "none";
+player.style.zIndex = "2";
 
 // ================= HP =================
 let myHp = 100;
@@ -63,6 +96,7 @@ myHpBar.style.background = "lime";
 myHpBar.style.position = "absolute";
 myHpBar.style.borderRadius = "3px";
 myHpBar.style.display = "none";
+myHpBar.style.zIndex = "3";
 document.body.appendChild(myHpBar);
 
 // ================= INPUT =================
@@ -80,57 +114,88 @@ function loop() {
     if (keys["a"]) x -= myCharSpeed;
     if (keys["d"]) x += myCharSpeed;
 
-    player.style.left = x + "px";
-    player.style.top = y + "px";
+    // ⭐ 클라이언트 쪽에서도 맵 경계 밖으로 못 나가게 고정
+    // (서버가 최종 권위를 갖지만, 로컬에서도 막아야 벽을 넘는 것처럼 보이는 깜빡임이 없음)
+    x = Math.max(0, Math.min(MAP_WIDTH - PLAYER_SIZE, x));
+    y = Math.max(0, Math.min(MAP_HEIGHT - PLAYER_SIZE, y));
 
-    myHpBar.style.left = x + "px";
-    myHpBar.style.top = (y - 12) + "px";
+    // ⭐ 카메라는 항상 나를 중심으로
+    updateCamera();
+
+    // 내 캐릭터는 항상 화면 중앙 근처 (카메라가 나를 따라가므로 결과적으로 고정된 위치)
+    placeAtWorld(player, x, y);
+    placeAtWorld(myHpBar, x, y - 12);
+
+    // 맵 배경도 카메라에 맞춰 이동
+    placeAtWorld(mapEl, 0, 0);
+
+    // 다른 플레이어들도 카메라 변경에 맞춰 다시 위치 갱신
+    for (const id in otherPlayers) {
+        const op = otherPlayers[id];
+        placeAtWorld(op.el, op.worldX, op.worldY);
+        if (hpBars[id]) {
+            placeAtWorld(hpBars[id], op.worldX, op.worldY - 12);
+        }
+    }
+
+    // 총알들도 카메라 변경에 맞춰 다시 위치 갱신
+    for (const id in bullets) {
+        const b = bullets[id];
+        placeAtWorld(b.el, b.worldX, b.worldY);
+    }
 
     socket.emit("move", { x, y });
 }
 loop();
 
 // ================= BULLET =================
-function createBullet(id, sx, sy, tx, ty, color) {
+function createBullet(id, startWorldX, startWorldY, targetWorldX, targetWorldY, color) {
 
     if (bullets[id]) return;
 
-    const bullet = document.createElement("div");
-    bullet.style.width = "10px";
-    bullet.style.height = "10px";
-    bullet.style.background = color;
-    bullet.style.position = "absolute";
-    bullet.style.borderRadius = "50%";
+    const bulletEl = document.createElement("div");
+    bulletEl.style.width = "10px";
+    bulletEl.style.height = "10px";
+    bulletEl.style.background = color;
+    bulletEl.style.position = "absolute";
+    bulletEl.style.borderRadius = "50%";
+    bulletEl.style.zIndex = "1";
 
-    document.body.appendChild(bullet);
+    document.body.appendChild(bulletEl);
 
-    const dx = tx - sx;
-    const dy = ty - sy;
+    const dx = targetWorldX - startWorldX;
+    const dy = targetWorldY - startWorldY;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
 
     const vx = (dx / len) * 10;
     const vy = (dy / len) * 10;
 
-    bullets[id] = bullet;
+    const bulletState = {
+        el: bulletEl,
+        worldX: startWorldX,
+        worldY: startWorldY,
+        vx, vy
+    };
 
-    let bx = sx;
-    let by = sy;
+    bullets[id] = bulletState;
+
+    placeAtWorld(bulletEl, bulletState.worldX, bulletState.worldY);
 
     function move() {
 
         if (!bullets[id] || dead) return;
 
-        bx += vx;
-        by += vy;
+        bulletState.worldX += bulletState.vx;
+        bulletState.worldY += bulletState.vy;
 
-        bullet.style.left = bx + "px";
-        bullet.style.top = by + "px";
+        placeAtWorld(bulletEl, bulletState.worldX, bulletState.worldY);
 
+        // 맵 경계를 벗어나면 제거 (서버와 동일한 기준)
         if (
-            bx < -100 || bx > window.innerWidth + 100 ||
-            by < -100 || by > window.innerHeight + 100
+            bulletState.worldX < -50 || bulletState.worldX > MAP_WIDTH + 50 ||
+            bulletState.worldY < -50 || bulletState.worldY > MAP_HEIGHT + 50
         ) {
-            bullet.remove();
+            bulletEl.remove();
             delete bullets[id];
             return;
         }
@@ -146,17 +211,21 @@ document.addEventListener("click", (e) => {
 
     if (!joinedRoom || dead) return;
 
+    // 클릭한 화면 좌표 → 월드 좌표로 변환 (카메라 오프셋 더하기)
+    const targetWorldX = e.clientX + camX;
+    const targetWorldY = e.clientY + camY;
+
     const sx = x + 25;
     const sy = y + 25;
 
-    const dx = e.clientX - sx;
-    const dy = e.clientY - sy;
+    const dx = targetWorldX - sx;
+    const dy = targetWorldY - sy;
 
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
 
     const id = socket.id + "_" + (bulletSeq++);
 
-    createBullet(id, sx, sy, e.clientX, e.clientY, "yellow");
+    createBullet(id, sx, sy, targetWorldX, targetWorldY, "yellow");
 
     socket.emit("shoot", {
         id,
@@ -195,17 +264,20 @@ socket.on("players", players => {
             div.style.background = "lime";
             div.style.position = "absolute";
             div.style.borderRadius = "50%";
+            div.style.zIndex = "2";
             document.body.appendChild(div);
-            otherPlayers[id] = div;
+            otherPlayers[id] = { el: div, worldX: 0, worldY: 0 };
         }
 
-        otherPlayers[id].style.left = players[id].x + "px";
-        otherPlayers[id].style.top = players[id].y + "px";
+        otherPlayers[id].worldX = players[id].x;
+        otherPlayers[id].worldY = players[id].y;
+
+        placeAtWorld(otherPlayers[id].el, players[id].x, players[id].y);
     }
 
     for (const id in otherPlayers) {
         if (!players[id]) {
-            otherPlayers[id].remove();
+            otherPlayers[id].el.remove();
             delete otherPlayers[id];
         }
     }
@@ -232,6 +304,7 @@ socket.on("hpUpdate", hpData => {
             bar.style.background = "red";
             bar.style.position = "absolute";
             bar.style.borderRadius = "3px";
+            bar.style.zIndex = "3";
             document.body.appendChild(bar);
             hpBars[id] = bar;
         }
@@ -239,9 +312,7 @@ socket.on("hpUpdate", hpData => {
         hpBars[id].style.width = (hpData[id] / 100) * 50 + "px";
 
         if (otherPlayers[id]) {
-            hpBars[id].style.left = otherPlayers[id].style.left;
-            hpBars[id].style.top =
-                (parseInt(otherPlayers[id].style.top) - 12) + "px";
+            placeAtWorld(hpBars[id], otherPlayers[id].worldX, otherPlayers[id].worldY - 12);
         }
     }
 
@@ -371,13 +442,22 @@ socket.on("gameStarted", (data) => {
 
     lobby.style.display = "none";
 
+    // 맵 크기 반영
+    if (data.map) {
+        MAP_WIDTH = data.map.width;
+        MAP_HEIGHT = data.map.height;
+    }
+
+    mapEl.style.width = MAP_WIDTH + "px";
+    mapEl.style.height = MAP_HEIGHT + "px";
+    mapEl.style.display = "block";
+
     player.style.display = "block";
     myHpBar.style.display = "block";
 
     const myData = data.players[socket.id];
     const myChar = data.characters[myData.characterId];
 
-    // 캐릭터 스탯 반영
     myCharSpeed = myChar.speed;
     myMaxHp = myChar.hp;
 
@@ -386,12 +466,13 @@ socket.on("gameStarted", (data) => {
     myHp = myData.hp;
 
     player.style.background = myChar.color;
-    player.style.left = x + "px";
-    player.style.top = y + "px";
+
+    updateCamera();
+    placeAtWorld(player, x, y);
+    placeAtWorld(myHpBar, x, y - 12);
+    placeAtWorld(mapEl, 0, 0);
 
     myHpBar.style.width = (myHp / myMaxHp) * 50 + "px";
-    myHpBar.style.left = x + "px";
-    myHpBar.style.top = (y - 12) + "px";
 
     roomTop.innerText = "ROOM: " + myRoomCode;
 
@@ -435,9 +516,10 @@ socket.on("dead", () => {
 
     if (dead) return;
     dead = true;
-    joinedRoom = false; // 업데이트 차단
+    joinedRoom = false;
 
     player.style.display = "none";
+    mapEl.style.display = "none";
     myHpBar.remove();
 
     for (const id in hpBars) {
@@ -446,12 +528,12 @@ socket.on("dead", () => {
     }
 
     for (const id in otherPlayers) {
-        otherPlayers[id].remove();
+        otherPlayers[id].el.remove();
         delete otherPlayers[id];
     }
 
     for (const id in bullets) {
-        bullets[id].remove();
+        bullets[id].el.remove();
         delete bullets[id];
     }
 

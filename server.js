@@ -9,6 +9,20 @@ app.get("/", (req, res) => {
     res.sendFile(__dirname + "/index.html");
 });
 
+// ⭐ 디버그용 임시 라우트: 서버가 실제로 보고 있는 파일 목록을 확인
+app.get("/debug-files", (req, res) => {
+    const fs = require("fs");
+    try {
+        const files = fs.readdirSync(__dirname);
+        res.json({
+            dirname: __dirname,
+            files: files
+        });
+    } catch (err) {
+        res.json({ error: err.message });
+    }
+});
+
 // ================= CHARACTERS (서버 기준 스탯) =================
 const CHARACTERS = {
     warrior: { name: "전사", hp: 120, speed: 4, bulletSpeed: 8, color: "crimson" },
@@ -16,6 +30,11 @@ const CHARACTERS = {
 };
 
 const MAX_PLAYERS = 4;
+
+// ================= MAP =================
+const MAP_WIDTH = 2000;
+const MAP_HEIGHT = 2000;
+const PLAYER_SIZE = 50; // 플레이어 div 한 변 길이 (px)
 
 const rooms = {};
 
@@ -70,7 +89,7 @@ io.on("connection", (socket) => {
         socket.roomCode = code;
 
         rooms[code].players[socket.id] = {
-            x: 100, y: 100,
+            x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2,
             hp: 100,
             characterId: null,
             ready: false
@@ -95,7 +114,7 @@ io.on("connection", (socket) => {
         socket.roomCode = code;
 
         room.players[socket.id] = {
-            x: 100, y: 100,
+            x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2,
             hp: 100,
             characterId: null,
             ready: false
@@ -146,20 +165,21 @@ io.on("connection", (socket) => {
 
         room.state = "playing";
 
-        // 스탯 기반으로 초기화
+        // 스탯 기반으로 초기화 (맵 중앙 근처에 서로 겹치지 않게 배치)
         ids.forEach((id, index) => {
             const p = room.players[id];
             const charData = CHARACTERS[p.characterId];
 
-            p.x = 100 + index * 80;
-            p.y = 100;
+            p.x = MAP_WIDTH / 2 + index * 100 - 150;
+            p.y = MAP_HEIGHT / 2;
             p.hp = charData.hp;
             p.maxHp = charData.hp;
         });
 
         io.to(socket.roomCode).emit("gameStarted", {
             players: room.players,
-            characters: CHARACTERS
+            characters: CHARACTERS,
+            map: { width: MAP_WIDTH, height: MAP_HEIGHT }
         });
     });
 
@@ -169,8 +189,12 @@ io.on("connection", (socket) => {
         const room = rooms[socket.roomCode];
         if (!room || room.state !== "playing" || !room.players[socket.id]) return;
 
-        room.players[socket.id].x = data.x;
-        room.players[socket.id].y = data.y;
+        // ⭐ 맵 경계 안으로 좌표 고정 (clamp)
+        const clampedX = Math.max(0, Math.min(MAP_WIDTH - PLAYER_SIZE, data.x));
+        const clampedY = Math.max(0, Math.min(MAP_HEIGHT - PLAYER_SIZE, data.y));
+
+        room.players[socket.id].x = clampedX;
+        room.players[socket.id].y = clampedY;
 
         io.to(socket.roomCode).emit("players", room.players);
     });
@@ -239,6 +263,12 @@ setInterval(() => {
 
             b.x += b.vx;
             b.y += b.vy;
+
+            // ⭐ 총알이 맵 밖으로 나가면 제거
+            if (b.x < 0 || b.x > MAP_WIDTH || b.y < 0 || b.y > MAP_HEIGHT) {
+                delete room.bullets[bid];
+                continue;
+            }
 
             for (const pid in room.players) {
 
