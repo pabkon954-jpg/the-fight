@@ -194,6 +194,18 @@ document.body.appendChild(myHpBar);
 document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
 document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
+// ⭐ 창/탭 포커스를 잃거나 다시 얻을 때 키 상태를 전부 초기화
+// (클릭으로 포커스가 옮겨가서 keyup이 누락되면 키가 "눌린 채로 고정"되는 버그 방지)
+function resetAllKeys() {
+    for (const k in keys) keys[k] = false;
+}
+
+window.addEventListener("blur", resetAllKeys);
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) resetAllKeys();
+});
+window.addEventListener("focus", resetAllKeys);
+
 // ================= LOOP =================
 function loop() {
     requestAnimationFrame(loop);
