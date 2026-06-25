@@ -530,6 +530,12 @@ socket.on("gameStarted", (data) => {
     livesBar.style.display = "block";
 
     const myData = data.players[socket.id];
+
+    if (!myData || !myData.characterId || !data.characters[myData.characterId]) {
+        console.error("gameStarted: 내 캐릭터 정보를 찾을 수 없습니다.", myData, data.characters);
+        return;
+    }
+
     const myChar = data.characters[myData.characterId];
 
     myCharSpeed = myChar.speed;

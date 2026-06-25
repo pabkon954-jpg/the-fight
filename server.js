@@ -76,8 +76,9 @@ function getPlayersSnapshot(room) {
             hp: p.hp,
             maxHp: p.maxHp,
             lives: p.lives,
-            alive: p.alive,       // 이번 라운드에서 살아있는지
-            eliminated: p.eliminated // 목숨 0 -> 게임에서 완전 탈락
+            alive: p.alive,           // 이번 라운드에서 살아있는지
+            eliminated: p.eliminated, // 목숨 0 -> 게임에서 완전 탈락
+            characterId: p.characterId // ⭐ 누락되어 있던 필드 추가
         };
     }
     return snap;
