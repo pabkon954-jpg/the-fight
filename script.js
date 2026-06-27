@@ -36,7 +36,14 @@ function monkeyFaceSVG() {
 const CHARACTER_DISPLAY = {
     warrior: { name: "전사", color: "crimson", statsText: "체력 120 · 속도 보통" },
     scout:   { name: "스카우트", color: "deepskyblue", statsText: "체력 80 · 속도 빠름" },
-    monkey:  { name: "원숭이", color: "#8a5a2b", statsText: "체력 400 · 속도 매우 빠름", faceSVG: monkeyFaceSVG }
+    monkey:  {
+        name: "원숭이", color: "#8a5a2b", statsText: "체력 400 · 속도 매우 빠름", faceSVG: monkeyFaceSVG,
+        skillUI: {
+            skill1: { key: "Q", icon: "🍌", cooldownSec: 5 },
+            skill2: { key: "E", icon: "🍌", cooldownSec: 7 },
+            skill3: { key: "R", icon: "🐾", cooldownSec: 20 }
+        }
+    }
 };
 
 // ================= TOP UI (방 코드) =================
@@ -152,6 +159,70 @@ function applyCharacterAppearance(el, characterId) {
     }
 }
 
+// ================= SKILL BAR UI =================
+const skillBarEl = document.getElementById("skillBar");
+
+function setupSkillBarUI(characterId) {
+
+    skillBarEl.innerHTML = "";
+    for (const key in skillSlotEls) delete skillSlotEls[key];
+
+    const info = CHARACTER_DISPLAY[characterId];
+
+    if (!info || !info.skillUI) {
+        skillBarEl.style.display = "none";
+        return;
+    }
+
+    skillBarEl.style.display = "flex";
+
+    for (const skillKey in info.skillUI) {
+        const skill = info.skillUI[skillKey];
+
+        const slot = document.createElement("div");
+        slot.className = "skill-slot";
+
+        const keyLabel = document.createElement("div");
+        keyLabel.className = "key-label";
+        keyLabel.innerText = skill.key;
+
+        const icon = document.createElement("div");
+        icon.className = "skill-icon";
+        icon.innerText = skill.icon;
+
+        const overlay = document.createElement("div");
+        overlay.className = "cooldown-overlay";
+
+        const text = document.createElement("div");
+        text.className = "cooldown-text";
+
+        slot.appendChild(keyLabel);
+        slot.appendChild(icon);
+        slot.appendChild(overlay);
+        slot.appendChild(text);
+        skillBarEl.appendChild(slot);
+
+        skillSlotEls[skillKey] = { root: slot, overlay, text, cooldownSec: skill.cooldownSec };
+    }
+}
+
+function updateSkillCooldownUI(cooldowns) {
+    for (const skillKey in skillSlotEls) {
+        const slotInfo = skillSlotEls[skillKey];
+        const remainingMs = cooldowns[skillKey] || 0;
+
+        if (remainingMs > 0) {
+            const pct = Math.min(100, (remainingMs / (slotInfo.cooldownSec * 1000)) * 100);
+            slotInfo.overlay.style.height = pct + "%";
+            slotInfo.text.style.display = "block";
+            slotInfo.text.innerText = Math.ceil(remainingMs / 1000);
+        } else {
+            slotInfo.overlay.style.height = "0%";
+            slotInfo.text.style.display = "none";
+        }
+    }
+}
+
 // ================= STATE =================
 let joinedRoom = false;     // 게임이 시작된 상태(로비 X)
 let canMove = false;        // 카운트다운이 끝나고 전투 중인지
@@ -161,8 +232,16 @@ let isEliminated = false;   // 목숨 0 -> 게임에서 완전 탈락
 let myRoomCode = null;
 let isHost = false;
 let selectedCharacter = null;
+let myCharacterId = null;
 let myCharSpeed = 5;
+let myBaseSpeed = 5;   // 패시브 적용 전 기본 속도 (서버 currentSpeed가 null일 때 사용)
 let myMaxHp = 100;
+
+// ===== 스킬 관련 상태 =====
+let myStunnedUntil = 0;       // 클라이언트 로컬 기준 기절 종료 시각(서버 값과 동기화됨)
+let isBlinded = false;
+let blindTimeoutHandle = null;
+const skillSlotEls = {};      // { skill1: { root, overlay, text }, ... }
 
 let x = 100;
 let y = 100;
@@ -173,6 +252,8 @@ const keys = {};
 const otherPlayers = {};   // { id: { el, worldX, worldY } }
 const hpBars = {};
 const bullets = {};        // { id: { el, worldX, worldY, vx, vy } }
+const traps = {};          // { id: { el } } - 스킬2 바나나 트랩 표시용
+const stunIcons = {};      // { playerId: el } - 기절 이펙트 표시용
 
 player.style.display = "none";
 player.style.zIndex = "2";
@@ -206,14 +287,76 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("focus", resetAllKeys);
 
+// ================= SKILL USE (Q/E/R) =================
+function canUseSkillsNow() {
+    return joinedRoom && canMove && isAlive && !isEliminated && Date.now() >= myStunnedUntil;
+}
+
+function useSkill(skillKey) {
+
+    if (!canUseSkillsNow()) return;
+    if (myCharacterId !== "monkey") return; // 스킬은 원숭이 전용
+
+    const targetWorldX = lastMouseX + camX;
+    const targetWorldY = lastMouseY + camY;
+
+    const sx = x + 25;
+    const sy = y + 25;
+
+    const dx = targetWorldX - sx;
+    const dy = targetWorldY - sy;
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const ndx = dx / len;
+    const ndy = dy / len;
+
+    if (skillKey === "skill1") {
+        // 바나나 투척 (서버가 데미지/효과 처리, 클라이언트는 투사체 표시만)
+        const id = "skill1_" + socket.id + "_" + Date.now();
+        createBullet(id, sx, sy, targetWorldX, targetWorldY, "#f5d547");
+
+        socket.emit("useSkill", {
+            skillKey,
+            startX: sx,
+            startY: sy,
+            vx: ndx * 9,
+            vy: ndy * 9
+        });
+
+    } else if (skillKey === "skill2") {
+        // 바나나 트랩 설치 (내 위치에 설치)
+        socket.emit("useSkill", {
+            skillKey,
+            x: sx,
+            y: sy
+        });
+
+    } else if (skillKey === "skill3") {
+        // 돌진 할퀴기 (마우스 방향으로 돌진)
+        socket.emit("useSkill", {
+            skillKey,
+            dirX: ndx,
+            dirY: ndy
+        });
+    }
+}
+
+document.addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase();
+    if (k === "q") useSkill("skill1");
+    else if (k === "e") useSkill("skill2");
+    else if (k === "r") useSkill("skill3");
+});
+
 // ================= LOOP =================
 function loop() {
     requestAnimationFrame(loop);
 
     if (!joinedRoom) return;
 
-    // ⭐ 카운트다운 중이거나 죽어서 관전 중이면 이동 불가
-    if (canMove && isAlive && !isEliminated) {
+    // ⭐ 카운트다운 중이거나 죽어서 관전 중이거나 기절 중이면 이동 불가
+    const stunned = Date.now() < myStunnedUntil;
+
+    if (canMove && isAlive && !isEliminated && !stunned) {
         if (keys["w"]) y -= myCharSpeed;
         if (keys["s"]) y += myCharSpeed;
         if (keys["a"]) x -= myCharSpeed;
@@ -242,6 +385,19 @@ function loop() {
     for (const id in bullets) {
         const b = bullets[id];
         placeAtWorld(b.el, b.worldX, b.worldY);
+    }
+
+    for (const id in traps) {
+        placeAtWorld(traps[id].el, traps[id].worldX, traps[id].worldY);
+    }
+
+    for (const pid in stunIcons) {
+        const target = pid === socket.id
+            ? { worldX: x, worldY: y }
+            : otherPlayers[pid];
+        if (target) {
+            placeAtWorld(stunIcons[pid], target.worldX, target.worldY - 30);
+        }
     }
 }
 loop();
@@ -310,10 +466,20 @@ function clearAllBullets() {
     }
 }
 
-// ================= SHOOT =================
+// ================= MOUSE TRACKING (스킬 방향 계산용) =================
+let lastMouseX = window.innerWidth / 2;
+let lastMouseY = window.innerHeight / 2;
+
+document.addEventListener("mousemove", (e) => {
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+});
+
+// ================= SHOOT (기본공격) =================
 document.addEventListener("click", (e) => {
 
     if (!joinedRoom || !canMove || !isAlive || isEliminated) return;
+    if (Date.now() < myStunnedUntil) return;
 
     const targetWorldX = e.clientX + camX;
     const targetWorldY = e.clientY + camY;
@@ -348,7 +514,125 @@ socket.on("shoot", (data) => {
     const targetX = data.x + data.vx * 100;
     const targetY = data.y + data.vy * 100;
 
-    createBullet(data.id, data.x, data.y, targetX, targetY, "red");
+    const color = data.isSkill1 ? "#f5d547" : "red";
+
+    createBullet(data.id, data.x, data.y, targetX, targetY, color);
+});
+
+// ================= TRAP (스킬2 바나나 설치) =================
+function createTrapVisual(id, worldX, worldY) {
+
+    const el = document.createElement("div");
+    el.style.width = "26px";
+    el.style.height = "20px";
+    el.style.position = "absolute";
+    el.style.zIndex = "1";
+    el.style.fontSize = "20px";
+    el.style.lineHeight = "20px";
+    el.style.textAlign = "center";
+    el.innerText = "🍌";
+
+    document.body.appendChild(el);
+
+    traps[id] = { el, worldX, worldY };
+    placeAtWorld(el, worldX, worldY);
+}
+
+function removeTrapVisual(id) {
+    if (traps[id]) {
+        traps[id].el.remove();
+        delete traps[id];
+    }
+}
+
+socket.on("trapPlaced", (data) => {
+    createTrapVisual(data.id, data.x, data.y);
+});
+
+socket.on("trapExpired", (data) => {
+    removeTrapVisual(data.id);
+});
+
+// ================= STUN (기절 이펙트) =================
+function showStunIcon(playerId, duration) {
+
+    if (stunIcons[playerId]) {
+        stunIcons[playerId].remove();
+        delete stunIcons[playerId];
+    }
+
+    const el = document.createElement("div");
+    el.className = "stun-icon";
+    el.innerText = "💫";
+    document.body.appendChild(el);
+    stunIcons[playerId] = el;
+
+    setTimeout(() => {
+        if (stunIcons[playerId] === el) {
+            el.remove();
+            delete stunIcons[playerId];
+        }
+    }, duration);
+}
+
+socket.on("playerStunned", (data) => {
+
+    showStunIcon(data.playerId, data.duration);
+
+    if (data.playerId === socket.id) {
+        myStunnedUntil = Date.now() + data.duration;
+    }
+});
+
+// ================= BLIND (시야 방해) =================
+const blindOverlay = document.getElementById("blindOverlay");
+
+socket.on("blinded", (data) => {
+
+    isBlinded = true;
+    blindOverlay.style.display = "block";
+
+    if (blindTimeoutHandle) clearTimeout(blindTimeoutHandle);
+
+    blindTimeoutHandle = setTimeout(() => {
+        isBlinded = false;
+        blindOverlay.style.display = "none";
+    }, data.duration);
+});
+
+// ================= SKILL3 DASH (돌진 할퀴기) =================
+socket.on("skill3Dash", (data) => {
+
+    // 돌진 주체가 나라면 내 좌표도 서버 값으로 맞춰줌 (서버 권위)
+    if (data.playerId === socket.id) {
+        x = data.endX;
+        y = data.endY;
+    } else if (otherPlayers[data.playerId]) {
+        otherPlayers[data.playerId].worldX = data.endX;
+        otherPlayers[data.playerId].worldY = data.endY;
+    }
+
+    // 돌진 경로를 잠깐 보여주는 잔상 이펙트
+    const trail = document.createElement("div");
+    trail.style.position = "absolute";
+    trail.style.zIndex = "1";
+    trail.style.background = "rgba(255,255,255,0.5)";
+    trail.style.height = "6px";
+    trail.style.borderRadius = "3px";
+    trail.style.transformOrigin = "0 50%";
+
+    const dx = data.endX - data.startX;
+    const dy = data.endY - data.startY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    trail.style.width = dist + "px";
+    trail.style.transform = `rotate(${angle}deg)`;
+
+    document.body.appendChild(trail);
+    placeAtWorld(trail, data.startX + 25, data.startY + 25);
+
+    setTimeout(() => trail.remove(), 250);
 });
 
 // ================= PLAYERS (위치 + 체력 + 목숨 + 생존 상태 통합) =================
@@ -365,6 +649,20 @@ socket.on("players", players => {
         if (myData.lives !== myLives) {
             myLives = myData.lives;
             renderLives();
+        }
+
+        // ⭐ 패시브 등으로 서버가 계산한 현재 속도를 반영 (null이면 캐릭터 기본 속도 사용)
+        myCharSpeed = (myData.currentSpeed != null) ? myData.currentSpeed : myBaseSpeed;
+
+        // ⭐ 기절 상태 동기화 (서버 값 기준)
+        if (myData.stunned) {
+            // 서버가 기절 중이라고 하면, 최소한 다음 틱까지는 기절 유지되도록 보정
+            myStunnedUntil = Math.max(myStunnedUntil, Date.now() + 100);
+        }
+
+        // ⭐ 스킬 쿨타임 UI 갱신
+        if (myData.cooldowns) {
+            updateSkillCooldownUI(myData.cooldowns);
         }
     }
 
@@ -583,10 +881,13 @@ socket.on("gameStarted", (data) => {
 
     const myChar = data.characters[myData.characterId];
 
+    myCharacterId = myData.characterId;
     myCharSpeed = myChar.speed;
+    myBaseSpeed = myChar.speed;
     myMaxHp = myChar.hp;
 
     applyCharacterAppearance(player, myData.characterId);
+    setupSkillBarUI(myData.characterId);
 
     roomTop.innerText = "ROOM: " + myRoomCode;
 
@@ -607,6 +908,21 @@ socket.on("roundStarting", (data) => {
     roundResultEl.style.display = "none";
 
     clearAllBullets();
+
+    // ⭐ 스킬 관련 상태도 라운드 시작 시 초기화
+    myStunnedUntil = 0;
+    isBlinded = false;
+    blindOverlay.style.display = "none";
+    if (blindTimeoutHandle) {
+        clearTimeout(blindTimeoutHandle);
+        blindTimeoutHandle = null;
+    }
+
+    for (const id in traps) removeTrapVisual(id);
+    for (const pid in stunIcons) {
+        stunIcons[pid].remove();
+        delete stunIcons[pid];
+    }
 
     const myData = data.players[socket.id];
 
