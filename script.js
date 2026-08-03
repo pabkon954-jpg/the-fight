@@ -1,67 +1,122 @@
 const socket = io();
 
-// UI 엘리먼트
+// DOM 요소
 const menuDiv = document.getElementById('menu');
 const lobbyDiv = document.getElementById('lobby');
 const gameDiv = document.getElementById('game');
 
-const createRoomBtn = document.getElementById('createRoomBtn');
-const joinRoomBtn = document.getElementById('joinRoomBtn');
-const roomInput = document.getElementById('roomInput');
+const nicknameInput = document.getElementById('nickname-input');
+const roomInput = document.getElementById('room-input');
+const createBtn = document.getElementById('create-btn');
+const joinBtn = document.getElementById('join-btn');
 
-const lobbyRoomCode = document.getElementById('lobbyRoomCode');
-const playerListItems = document.getElementById('playerListItems');
-const startBtn = document.getElementById('startBtn');
+const roomCodeDisplay = document.getElementById('room-code-display');
+const playerList = document.getElementById('player-list');
+const startGameBtn = document.getElementById('start-game-btn');
 
-// 이벤트 리스너: 방 만들기
-createRoomBtn.addEventListener('click', () => {
-    socket.emit('createRoom');
+const chatBox = document.getElementById('chat-box');
+const questionInput = document.getElementById('question-input');
+const sendBtn = document.getElementById('send-btn');
+const turnInfo = document.getElementById('turn-info');
+
+let currentRoomCode = '';
+
+// 방 만들기
+createBtn.addEventListener('click', () => {
+  const name = nicknameInput.value.trim() || '플레이어';
+  socket.emit('createRoom', { name });
 });
 
-// 이벤트 리스너: 입장하기
-joinRoomBtn.addEventListener('click', () => {
-    const code = roomInput.value.trim();
-    if (code.length === 4) {
-        socket.emit('joinRoom', code);
-    } else {
-        alert('4자리 방 코드를 입력하세요.');
-    }
+// 방 참가
+joinBtn.addEventListener('click', () => {
+  const name = nicknameInput.value.trim() || '플레이어';
+  const roomCode = roomInput.value.trim();
+  if (roomCode) {
+    socket.emit('joinRoom', { name, roomCode });
+  }
 });
 
-// [Socket 이벤트] 방 생성 성공
-socket.on('roomCreated', (data) => {
-    menuDiv.style.display = 'none';
-    lobbyDiv.style.display = 'flex';
-    lobbyRoomCode.innerText = `ROOM: ${data.roomCode}`;
-    updatePlayerList(data.players);
-    startBtn.disabled = false; // 방장은 시작 가능
+// 게임 시작 버튼 클릭 이벤트 (★ 이 부분이 클릭을 감지합니다)
+startGameBtn.addEventListener('click', () => {
+  console.log('게임 시작 버튼 클릭됨!');
+  socket.emit('startGame', { roomCode: currentRoomCode });
 });
 
-// [Socket 이벤트] 방 입장 성공
-socket.on('roomJoined', (data) => {
-    menuDiv.style.display = 'none';
-    lobbyDiv.style.display = 'flex';
-    lobbyRoomCode.innerText = `ROOM: ${data.roomCode}`;
-    updatePlayerList(data.players);
-    startBtn.disabled = true; // 일반 플레이어는 시작 불가
+// 질문/정답 전송
+sendBtn.addEventListener('click', sendQuestion);
+questionInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') sendQuestion();
 });
 
-// [Socket 이벤트] 플레이어 목록 업데이트
-socket.on('playerJoined', (data) => {
-    updatePlayerList(data.players);
+function sendQuestion() {
+  const text = questionInput.value.trim();
+  if (text) {
+    socket.emit('sendQuestion', { roomCode: currentRoomCode, text });
+    questionInput.value = '';
+  }
+}
+
+// Socket 이벤트 수신
+socket.on('roomCreated', ({ roomCode, players }) => {
+  currentRoomCode = roomCode;
+  roomCodeDisplay.innerText = `ROOM: ${roomCode}`;
+  updatePlayerList(players);
+  menuDiv.classList.add('hidden');
+  lobbyDiv.classList.remove('hidden');
 });
 
-// [Socket 이벤트] 에러 메시지
+socket.on('roomJoined', ({ roomCode, players }) => {
+  currentRoomCode = roomCode;
+  roomCodeDisplay.innerText = `ROOM: ${roomCode}`;
+  updatePlayerList(players);
+  menuDiv.classList.add('hidden');
+  lobbyDiv.classList.remove('hidden');
+});
+
+socket.on('updatePlayers', ({ players }) => {
+  updatePlayerList(players);
+});
+
+socket.on('gameStarted', ({ currentTurnPlayer }) => {
+  lobbyDiv.classList.add('hidden');
+  gameDiv.classList.remove('hidden');
+  appendMessage('SYSTEM', '게임이 시작되었습니다! AI가 비밀 단어를 선택했습니다.');
+  updateTurn(currentTurnPlayer);
+});
+
+socket.on('newMessage', ({ sender, text }) => {
+  appendMessage(sender, text);
+});
+
+socket.on('updateTurn', ({ currentTurnPlayer }) => {
+  updateTurn(currentTurnPlayer);
+});
+
 socket.on('errorMsg', (msg) => {
-    alert(msg);
+  alert(msg);
 });
 
 function updatePlayerList(players) {
-    playerListItems.innerHTML = '';
-    players.forEach(p => {
-        const div = document.createElement('div');
-        div.className = 'player-row';
-        div.innerText = p.name;
-        playerListItems.appendChild(div);
-    });
+  playerList.innerHTML = '';
+  players.forEach(p => {
+    const li = document.createElement('li');
+    li.innerText = p.name;
+    playerList.appendChild(li);
+  });
+}
+
+function updateTurn(player) {
+  if (player.id === socket.id) {
+    turnInfo.innerText = '★ 당신의 차례입니다! (질문 또는 정답을 입력하세요)';
+  } else {
+    turnInfo.innerText = `${player.name} 님의 차례입니다...`;
+  }
+}
+
+function appendMessage(sender, text) {
+  const p = document.createElement('p');
+  p.style.margin = '4px 0';
+  p.innerHTML = `<strong>${sender}:</strong> ${text}`;
+  chatBox.appendChild(p);
+  chatBox.scrollTop = chatBox.scrollHeight;
 }

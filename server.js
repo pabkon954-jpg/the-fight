@@ -1,89 +1,133 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
+const { GoogleGenAI } = require('@google/genai');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// static 파일 제공 (index.html, script.js 등)
-app.use(express.static(path.join(__dirname, '/')));
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// 방 상태 저장
+app.use(express.static(__dirname));
+
 const rooms = {};
 
-// 4자리 랜덤 방 코드 생성
 function generateRoomCode() {
-    return Math.floor(1000 + Math.random() * 9000).toString();
+  return Math.floor(1000 + Math.random() * 9000).toString();
 }
 
 io.on('connection', (socket) => {
-    console.log('플레이어 접속:', socket.id);
+  console.log('플레이어 접속:', socket.id);
 
-    // 방 만들기
-    socket.on('createRoom', () => {
-        const roomCode = generateRoomCode();
-        rooms[roomCode] = {
-            host: socket.id,
-            players: [{ id: socket.id, name: `플레이어 1` }],
-            questionCount: 20,
-            currentTurnIndex: 0,
-            targetWord: "사과", // 임시 정답 (추후 AI API 연동)
-            isPlaying: false
-        };
+  socket.on('createRoom', ({ name }) => {
+    const roomCode = generateRoomCode();
+    rooms[roomCode] = {
+      players: [{ id: socket.id, name }],
+      isPlaying: false,
+      secretWord: '',
+      history: [],
+      currentTurnIndex: 0
+    };
+    socket.join(roomCode);
+    socket.emit('roomCreated', { roomCode, players: rooms[roomCode].players });
+  });
 
-        socket.join(roomCode);
-        socket.roomCode = roomCode;
+  socket.on('joinRoom', ({ name, roomCode }) => {
+    const room = rooms[roomCode];
+    if (!room) return socket.emit('errorMsg', '방이 존재하지 않습니다.');
+    if (room.isPlaying) return socket.emit('errorMsg', '이미 게임이 진행 중입니다.');
 
-        socket.emit('roomCreated', {
-            roomCode: roomCode,
-            players: rooms[roomCode].players,
-            isHost: true
-        });
-    });
+    room.players.push({ id: socket.id, name });
+    socket.join(roomCode);
+    socket.emit('roomJoined', { roomCode, players: room.players });
+    io.to(roomCode).emit('updatePlayers', { players: room.players });
+  });
 
-    // 방 입장하기
-    socket.on('joinRoom', (roomCode) => {
-        const room = rooms[roomCode];
-        if (!room) {
-            socket.emit('errorMsg', '존재하지 않는 방 번호입니다.');
-            return;
-        }
+  socket.on('startGame', async ({ roomCode }) => {
+    const room = rooms[roomCode];
+    if (!room) return;
 
-        const playerNum = room.players.length + 1;
-        room.players.push({ id: socket.id, name: `플레이어 ${playerNum}` });
+    try {
+      // Gemini API를 사용하여 정답 단어 선정
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: '스무고개 게임용 단어를 딱 1개만 정해줘. 쉬운 명사여야 하고 (예: 사과, 호랑이, 냉장고), 오직 단어 이름만 출력해.'
+      });
+      
+      room.secretWord = response.text.trim();
+      room.isPlaying = true;
+      room.currentTurnIndex = 0;
+      room.history = [];
 
-        socket.join(roomCode);
-        socket.roomCode = roomCode;
+      console.log(`[${roomCode}] 선택된 단어:`, room.secretWord);
 
-        // 방 전체에 업데이트 전달
-        io.to(roomCode).emit('playerJoined', {
-            players: room.players
-        });
+      io.to(roomCode).emit('gameStarted', {
+        currentTurnPlayer: room.players[room.currentTurnIndex]
+      });
+    } catch (err) {
+      console.error('Gemini API Error:', err);
+      socket.emit('errorMsg', 'AI 단어 생성 실패. GEMINI_API_KEY를 확인하세요.');
+    }
+  });
 
-        socket.emit('roomJoined', {
-            roomCode: roomCode,
-            players: room.players,
-            isHost: false
-        });
-    });
+  socket.on('sendQuestion', async ({ roomCode, text }) => {
+    const room = rooms[roomCode];
+    if (!room || !room.isPlaying) return;
 
-    // 접속 해제
-    socket.on('disconnect', () => {
-        const roomCode = socket.roomCode;
-        if (roomCode && rooms[roomCode]) {
-            rooms[roomCode].players = rooms[roomCode].players.filter(p => p.id !== socket.id);
-            if (rooms[roomCode].players.length === 0) {
-                delete rooms[roomCode];
-            } else {
-                io.to(roomCode).emit('playerJoined', { players: rooms[roomCode].players });
-            }
-        }
-    });
+    const currentPlayer = room.players[room.currentTurnIndex];
+    if (currentPlayer.id !== socket.id) {
+      return socket.emit('errorMsg', '당신의 차례가 아닙니다!');
+    }
+
+    io.to(roomCode).emit('newMessage', { sender: currentPlayer.name, text });
+
+    // AI 답변 생성
+    try {
+      const prompt = `
+        너는 스무고개 게임의 AI 사회자야.
+        비밀 단어: "${room.secretWord}"
+        
+        플레이어 질문/정답시도: "${text}"
+        
+        규칙:
+        1. 질문이라면 '네', '아니오', '관련없음' 중 하나로 답변하고 1문장으로 짧게 설명을 붙여줘.
+        2. 플레이어가 정답을 정확히 맞췄다면 "정답입니다!"라고 말해줘.
+      `;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt
+      });
+
+      const aiReply = response.text.trim();
+      io.to(roomCode).emit('newMessage', { sender: 'AI 사회자', text: aiReply });
+
+      if (aiReply.includes('정답입니다')) {
+        io.to(roomCode).emit('newMessage', { sender: 'SYSTEM', text: `축하합니다! 정답은 [${room.secretWord}] 이었습니다!` });
+        room.isPlaying = false;
+      } else {
+        // 다음 순번으로 변경
+        room.currentTurnIndex = (room.currentTurnIndex + 1) % room.players.length;
+        io.to(roomCode).emit('updateTurn', { currentTurnPlayer: room.players[room.currentTurnIndex] });
+      }
+    } catch (err) {
+      console.error('AI Reply Error:', err);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    for (const roomCode in rooms) {
+      const room = rooms[roomCode];
+      room.players = room.players.filter(p => p.id !== socket.id);
+      if (room.players.length === 0) {
+        delete rooms[roomCode];
+      } else {
+        io.to(roomCode).emit('updatePlayers', { players: room.players });
+      }
+    }
+  });
 });
 
-const PORT = 3000;
-server.listen(PORT, () => {
-    console.log(`✅ 서버가 실행되었습니다: http://localhost:${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`서버가 실행되었습니다: port ${PORT}`));

@@ -1,263 +1,50 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI 협동 스무고개</title>
-<style>
-    html, body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        background: #121212;
-        color: white;
-        font-family: 'Pretendard', sans-serif;
-        user-select: none;
-    }
-
-    /* ============ MENU (방 생성/입장) ============ */
-    #menu {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        gap: 16px;
-        background: #121212;
-        z-index: 20;
-    }
-
-    #menu h1 {
-        font-size: 36px;
-        margin-bottom: 10px;
-        color: #4caf50;
-    }
-
-    #menu button, #menu input {
-        font-size: 18px;
-        padding: 12px 18px;
-        border-radius: 8px;
-        border: none;
-        outline: none;
-    }
-
-    #menu input {
-        background: #222;
-        color: white;
-        border: 1px solid #444;
-        text-align: center;
-    }
-
-    #menu button {
-        background: #4caf50;
-        color: white;
-        font-weight: bold;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
-
-    #menu button:hover {
-        background: #45a049;
-    }
-
-    /* ============ LOBBY (대기실) ============ */
-    #lobby {
-        position: fixed;
-        inset: 0;
-        display: none;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        z-index: 15;
-        background: #181818;
-        padding: 30px;
-    }
-
-    #lobbyRoomCode {
-        font-size: 28px;
-        font-weight: bold;
-        color: #ffd23f;
-        margin-bottom: 20px;
-    }
-
-    #playerList {
-        width: 320px;
-        background: #242424;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-
-    .player-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 10px 0;
-        border-bottom: 1px solid #333;
-    }
-
-    #startBtn {
-        font-size: 20px;
-        padding: 12px 36px;
-        border-radius: 8px;
-        border: none;
-        background: #4caf50;
-        color: white;
-        font-weight: bold;
-        cursor: pointer;
-    }
-
-    #startBtn:disabled {
-        background: #444;
-        cursor: not-allowed;
-    }
-
-    /* ============ GAME (스무고개 게임 화면) ============ */
-    #game {
-        display: none;
-        flex-direction: column;
-        max-width: 800px;
-        height: 100vh;
-        margin: 0 auto;
-        padding: 20px;
-        box-sizing: border-box;
-    }
-
-    #gameHeader {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        background: #222;
-        padding: 16px 24px;
-        border-radius: 12px;
-        margin-bottom: 16px;
-    }
-
-    .count-badge {
-        font-size: 22px;
-        font-weight: bold;
-        color: #ffd23f;
-    }
-
-    .turn-badge {
-        font-size: 16px;
-        color: #81c784;
-    }
-
-    /* 질문 및 대화 로그 */
-    #chatLog {
-        flex: 1;
-        background: #1e1e1e;
-        border-radius: 12px;
-        padding: 20px;
-        overflow-y: auto;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        border: 1px solid #333;
-    }
-
-    .msg-box {
-        max-width: 80%;
-        padding: 12px 16px;
-        border-radius: 10px;
-        line-height: 1.4;
-    }
-
-    .msg-player {
-        align-self: flex-end;
-        background: #2e7d32;
-        color: white;
-    }
-
-    .msg-ai {
-        align-self: flex-start;
-        background: #333;
-        border: 1px solid #555;
-        color: #e0e0e0;
-    }
-
-    .msg-system {
-        align-self: center;
-        background: transparent;
-        color: #888;
-        font-size: 14px;
-    }
-
-    /* 입력 영역 */
-    #inputArea {
-        display: flex;
-        gap: 10px;
-        margin-top: 16px;
-    }
-
-    #questionInput {
-        flex: 1;
-        padding: 14px;
-        border-radius: 8px;
-        border: 1px solid #444;
-        background: #222;
-        color: white;
-        font-size: 16px;
-    }
-
-    .btn-action {
-        padding: 0 20px;
-        border-radius: 8px;
-        border: none;
-        font-weight: bold;
-        cursor: pointer;
-        font-size: 16px;
-    }
-
-    #sendQBtn { background: #2196f3; color: white; }
-    #sendAnsBtn { background: #e91e63; color: white; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 협동 스무고개</title>
+  <style>
+    body { font-family: sans-serif; background-color: #121212; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+    .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 350px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    input, button { width: 90%; padding: 10px; margin: 8px 0; border-radius: 6px; border: none; font-size: 16px; }
+    button { background-color: #4CAF50; color: white; cursor: pointer; font-weight: bold; }
+    button:hover { background-color: #45a049; }
+    .player-list { list-style: none; padding: 0; text-align: left; }
+    .player-list li { background: #2a2a2a; padding: 8px; margin: 4px 0; border-radius: 4px; }
+    #chat-box { height: 200px; overflow-y: auto; background: #2a2a2a; border-radius: 6px; padding: 10px; text-align: left; font-size: 14px; margin-bottom: 10px; }
+    .hidden { display: none; }
+  </style>
 </head>
 <body>
 
-    <!-- ===== MENU (방 생성/입장) ===== -->
-    <div id="menu">
-        <h1>🤖 AI 협동 스무고개</h1>
-        <button id="createRoomBtn">새 방 만들기</button>
-        <div style="display: flex; gap: 8px;">
-            <input id="roomInput" placeholder="방 코드 4자리" maxlength="4">
-            <button id="joinRoomBtn">입장하기</button>
-        </div>
-    </div>
+  <!-- 메뉴 화면 -->
+  <div id="menu" class="card">
+    <h2>AI 협동 스무고개</h2>
+    <input type="text" id="nickname-input" placeholder="닉네임 입력">
+    <button id="create-btn">방 만들기</button>
+    <input type="text" id="room-input" placeholder="방 코드 입력">
+    <button id="join-btn">방 참가</button>
+  </div>
 
-    <!-- ===== LOBBY (대기실) ===== -->
-    <div id="lobby">
-        <div id="lobbyRoomCode">ROOM: ----</div>
-        <div id="playerList">
-            <h3 style="margin-top:0; text-align:center;">참여 플레이어</h3>
-            <div id="playerListItems"></div>
-        </div>
-        <button id="startBtn" disabled>게임 시작</button>
-    </div>
+  <!-- 대기실 화면 -->
+  <div id="lobby" class="card hidden">
+    <h2 id="room-code-display">ROOM: ----</h2>
+    <h3>참여 플레이어</h3>
+    <ul id="player-list" class="player-list"></ul>
+    <button id="start-game-btn">게임 시작</button>
+  </div>
 
-    <!-- ===== GAME (스무고개 메인) ===== -->
-    <div id="game">
-        <div id="gameHeader">
-            <div>
-                <span>남은 질문: </span>
-                <span id="qCount" class="count-badge">20</span> / 20
-            </div>
-            <div id="currentTurn" class="turn-badge">현재 차례: 대기 중...</div>
-        </div>
+  <!-- 게임 화면 -->
+  <div id="game" class="card hidden">
+    <h2>스무고개 진행 중</h2>
+    <div id="turn-info" style="color: #FFD700; margin-bottom: 8px;">관전 중...</div>
+    <div id="chat-box"></div>
+    <input type="text" id="question-input" placeholder="질문 또는 정답 입력...">
+    <button id="send-btn">전송</button>
+  </div>
 
-        <div id="chatLog">
-            <div class="msg-box msg-system">AI가 정답 단어를 생성 중입니다...</div>
-        </div>
-
-        <div id="inputArea">
-            <input id="questionInput" placeholder="질문이나 정답을 입력하세요..." disabled>
-            <button id="sendQBtn" class="btn-action" disabled>질문하기</button>
-            <button id="sendAnsBtn" class="btn-action" disabled>정답 도전</button>
-        </div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
