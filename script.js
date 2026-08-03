@@ -1,6 +1,6 @@
 const socket = io();
 
-// DOM 요소
+// DOM 요소 참조
 const menuDiv = document.getElementById('menu');
 const lobbyDiv = document.getElementById('lobby');
 const gameDiv = document.getElementById('game');
@@ -33,16 +33,22 @@ joinBtn.addEventListener('click', () => {
   const roomCode = roomInput.value.trim();
   if (roomCode) {
     socket.emit('joinRoom', { name, roomCode });
+  } else {
+    alert('방 코드를 입력해주세요.');
   }
 });
 
-// 게임 시작 버튼 클릭 이벤트 (★ 이 부분이 클릭을 감지합니다)
+// 게임 시작 버튼 이벤트
 startGameBtn.addEventListener('click', () => {
-  console.log('게임 시작 버튼 클릭됨!');
+  console.log('게임 시작 버튼 클릭됨! 방 코드:', currentRoomCode);
+  if (!currentRoomCode) {
+    alert('방 정보가 올바르지 않습니다. 다시 입장해 주세요.');
+    return;
+  }
   socket.emit('startGame', { roomCode: currentRoomCode });
 });
 
-// 질문/정답 전송
+// 질문 및 정답 전송
 sendBtn.addEventListener('click', sendQuestion);
 questionInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') sendQuestion();
@@ -56,7 +62,7 @@ function sendQuestion() {
   }
 }
 
-// Socket 이벤트 수신
+// Socket 이벤트 리스너 설정
 socket.on('roomCreated', ({ roomCode, players }) => {
   currentRoomCode = roomCode;
   roomCodeDisplay.innerText = `ROOM: ${roomCode}`;
@@ -80,7 +86,7 @@ socket.on('updatePlayers', ({ players }) => {
 socket.on('gameStarted', ({ currentTurnPlayer }) => {
   lobbyDiv.classList.add('hidden');
   gameDiv.classList.remove('hidden');
-  appendMessage('SYSTEM', '게임이 시작되었습니다! AI가 비밀 단어를 선택했습니다.');
+  appendMessage('SYSTEM', '게임이 시작되었습니다! AI가 비밀 단어를 지정했습니다.');
   updateTurn(currentTurnPlayer);
 });
 
@@ -107,7 +113,7 @@ function updatePlayerList(players) {
 
 function updateTurn(player) {
   if (player.id === socket.id) {
-    turnInfo.innerText = '★ 당신의 차례입니다! (질문 또는 정답을 입력하세요)';
+    turnInfo.innerText = '★ 당신의 차례입니다! (질문 또는 정답 입력)';
   } else {
     turnInfo.innerText = `${player.name} 님의 차례입니다...`;
   }
