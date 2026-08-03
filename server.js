@@ -19,6 +19,28 @@ app.use(express.static(path.join(__dirname, 'public')));
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const rooms = {};
 
+// 🎯 Groq AI를 활용해 완전 무작위 명사 단어 1개 뽑기
+async function generateRandomWordFromAI() {
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [{ 
+        role: 'user', 
+        content: '스무고개 게임용 한국어 명사 단어(예: 호랑이, 세탁기, 은하수, 비행기, 떡볶이 등) 하나만 무작위로 출력하세요. 다른 부연 설명, 공백, 특수문자 없이 단어만 한 단어로 출력하세요.' 
+      }],
+      model: 'llama-3.1-8b-instant',
+      temperature: 1.0 // 창의성/무작위성 극대화
+    });
+    
+    // 특수문자 및 공백 제거 후 순수 단어만 추출
+    const word = completion.choices[0]?.message?.content?.trim().replace(/[^가-힣a-zA-A0-9]/g, '');
+    return word || "사과";
+  } catch (e) {
+    console.error('단어 생성 중 오류 발생:', e.message);
+    return "바나나";
+  }
+}
+
+// 🤖 AI 답변 생성 (네/아니오)
 async function askAI(targetWord, userQuestion) {
   try {
     const prompt = `
@@ -47,15 +69,19 @@ async function askAI(targetWord, userQuestion) {
 }
 
 io.on('connection', (socket) => {
-  // 방 만들기
-  socket.on('createRoom', ({ username }) => {
+
+  // 1. 방 만들기 (AI가 랜덤 단어 설정)
+  socket.on('createRoom', async ({ username }) => {
     const roomId = Math.floor(1000 + Math.random() * 9000).toString();
+    const selectedWord = await generateRandomWordFromAI(); 
+    
     rooms[roomId] = {
-      targetWord: "사과",
+      targetWord: selectedWord,
       questionCount: 0,
       maxQuestions: 20,
       isGameOver: false,
       users: [{ id: socket.id, username }],
+      currentTurnIndex: 0,
       history: []
     };
 
@@ -63,10 +89,11 @@ io.on('connection', (socket) => {
     socket.roomId = roomId;
     socket.username = username;
 
+    console.log(`[방 생성] 코드: ${roomId} | 생성된 정답: ${selectedWord}`);
     socket.emit('roomCreated', { roomId, gameState: rooms[roomId] });
   });
 
-  // 방 참가하기
+  // 2. 방 참가하기
   socket.on('joinRoom', ({ roomId, username }) => {
     const room = rooms[roomId];
     if (!room) {
@@ -80,22 +107,32 @@ io.on('connection', (socket) => {
     socket.username = username;
 
     socket.emit('roomJoined', { roomId, gameState: room });
-    // 모든 플레이어에게 전달할 때 users 배열 전체를 확실히 넘겨줍니다.
-    io.to(roomId).emit('userJoined', { username, users: room.users });
+    io.to(roomId).emit('updateGameState', { 
+      users: room.users, 
+      currentTurnUser: room.users[room.currentTurnIndex]?.username 
+    });
   });
 
-  // 질문 전송
+  // 3. 질문/정답 전송 및 턴 관리
   socket.on('sendQuestion', async ({ question }) => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
 
     if (!room || room.isGameOver) return;
 
+    // 현재 턴 유저 체크
+    const currentTurnUser = room.users[room.currentTurnIndex];
+    if (currentTurnUser.id !== socket.id) {
+      socket.emit('errorMessage', `지금은 ${currentTurnUser.username} 님의 턴입니다!`);
+      return;
+    }
+
     const userQuestion = question.trim();
     if (!userQuestion) return;
 
     room.questionCount += 1;
 
+    // 정답을 맞춘 경우
     if (userQuestion === room.targetWord) {
       room.isGameOver = true;
       const resultData = {
@@ -103,28 +140,36 @@ io.on('connection', (socket) => {
         user: socket.username || '익명',
         question: userQuestion,
         answer: `🎉 정답입니다! 정답은 [${room.targetWord}]였습니다!`,
-        isGameOver: true
+        isGameOver: true,
+        currentTurnUser: null
       };
       room.history.push(resultData);
       io.to(roomId).emit('newAnswer', resultData);
       return;
     }
 
+    // AI 답변
     const aiAnswer = await askAI(room.targetWord, userQuestion);
     if (room.questionCount >= room.maxQuestions) room.isGameOver = true;
+
+    // 턴 넘기기
+    room.currentTurnIndex = (room.currentTurnIndex + 1) % room.users.length;
+    const nextTurnUser = room.users[room.currentTurnIndex].username;
 
     const turnResult = {
       questionCount: room.questionCount,
       user: socket.username || '익명',
       question: userQuestion,
       answer: aiAnswer,
-      isGameOver: room.isGameOver
+      isGameOver: room.isGameOver,
+      currentTurnUser: nextTurnUser
     };
 
     room.history.push(turnResult);
     io.to(roomId).emit('newAnswer', turnResult);
   });
 
+  // 접속 종료 처리
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
     if (roomId && rooms[roomId]) {
@@ -132,7 +177,11 @@ io.on('connection', (socket) => {
       if (rooms[roomId].users.length === 0) {
         delete rooms[roomId];
       } else {
-        io.to(roomId).emit('userLeft', { users: rooms[roomId].users });
+        rooms[roomId].currentTurnIndex %= rooms[roomId].users.length;
+        io.to(roomId).emit('updateGameState', { 
+          users: rooms[roomId].users, 
+          currentTurnUser: rooms[roomId].users[rooms[roomId].currentTurnIndex]?.username 
+        });
       }
     }
   });
@@ -140,5 +189,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
-  console.log(`🚀 서버가 포트 ${PORT}에서 실행 중입니다.`);
+  console.log(`🚀 서버 실행 중 - 포트 ${PORT}`);
 });
