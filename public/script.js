@@ -1,128 +1,106 @@
 const socket = io();
 
-// DOM 요소 참조
-const menuDiv = document.getElementById('menu');
-const lobbyDiv = document.getElementById('lobby');
-const gameDiv = document.getElementById('game');
+const lobbyScreen = document.getElementById('lobby-screen');
+const gameScreen = document.getElementById('game-screen');
+const usernameInput = document.getElementById('username-input');
+const roomIdInput = document.getElementById('room-id-input');
+const createRoomBtn = document.getElementById('create-room-btn');
+const joinRoomBtn = document.getElementById('join-room-btn');
 
-const nicknameInput = document.getElementById('nickname-input');
-const roomInput = document.getElementById('room-input');
-const createBtn = document.getElementById('create-btn');
-const joinBtn = document.getElementById('join-btn');
-
-const roomCodeDisplay = document.getElementById('room-code-display');
+const displayRoomId = document.getElementById('display-room-id');
 const playerList = document.getElementById('player-list');
-const startGameBtn = document.getElementById('start-game-btn');
-
-const chatBox = document.getElementById('chat-box');
+const chatHistory = document.getElementById('chat-history');
 const questionInput = document.getElementById('question-input');
-const sendBtn = document.getElementById('send-btn');
-const turnInfo = document.getElementById('turn-info');
+const sendQuestionBtn = document.getElementById('send-question-btn');
+const questionCountText = document.getElementById('question-count');
 
-let currentRoomCode = '';
-
-// 방 만들기
-createBtn.addEventListener('click', () => {
-  const name = nicknameInput.value.trim() || '플레이어';
-  socket.emit('createRoom', { name });
+// 1. 방 만들기
+createRoomBtn.addEventListener('click', () => {
+  const username = usernameInput.value.trim();
+  if (!username) return alert('닉네임을 입력해주세요!');
+  socket.emit('createRoom', { username });
 });
 
-// 방 참가
-joinBtn.addEventListener('click', () => {
-  const name = nicknameInput.value.trim() || '플레이어';
-  const roomCode = roomInput.value.trim();
-  if (roomCode) {
-    socket.emit('joinRoom', { name, roomCode });
-  } else {
-    alert('방 코드를 입력해주세요.');
-  }
+// 2. 방 참가하기
+joinRoomBtn.addEventListener('click', () => {
+  const username = usernameInput.value.trim();
+  const roomId = roomIdInput.value.trim();
+  if (!username) return alert('닉네임을 입력해주세요!');
+  if (!roomId) return alert('방 번호를 입력해주세요!');
+  socket.emit('joinRoom', { roomId, username });
 });
 
-// 게임 시작 버튼 이벤트
-startGameBtn.addEventListener('click', () => {
-  console.log('게임 시작 버튼 클릭됨! 방 코드:', currentRoomCode);
-  if (!currentRoomCode) {
-    alert('방 정보가 올바르지 않습니다. 다시 입장해 주세요.');
-    return;
-  }
-  socket.emit('startGame', { roomCode: currentRoomCode });
-});
+// 3. 질문 보내기
+function handleSendQuestion() {
+  const question = questionInput.value.trim();
+  if (!question) return;
+  socket.emit('sendQuestion', { question });
+  questionInput.value = '';
+}
 
-// 질문 및 정답 전송
-sendBtn.addEventListener('click', sendQuestion);
+sendQuestionBtn.addEventListener('click', handleSendQuestion);
 questionInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') sendQuestion();
+  if (e.key === 'Enter') handleSendQuestion();
 });
 
-function sendQuestion() {
-  const text = questionInput.value.trim();
-  if (text) {
-    socket.emit('sendQuestion', { roomCode: currentRoomCode, text });
-    questionInput.value = '';
+// 소켓 수신 이벤트
+socket.on('roomCreated', ({ roomId, gameState }) => enterGame(roomId, gameState));
+socket.on('roomJoined', ({ roomId, gameState }) => enterGame(roomId, gameState));
+
+socket.on('userJoined', (data) => {
+  if (data && data.users) updatePlayerList(data.users);
+});
+
+socket.on('userLeft', (data) => {
+  if (data && data.users) updatePlayerList(data.users);
+});
+
+socket.on('newAnswer', (data) => {
+  appendMessage(data);
+  if (questionCountText) {
+    questionCountText.textContent = `${data.questionCount} / 20`;
+  }
+});
+
+socket.on('errorMessage', (msg) => alert(msg));
+
+// UI 헬퍼 함수
+function enterGame(roomId, gameState) {
+  if (lobbyScreen) lobbyScreen.style.display = 'none';
+  if (gameScreen) gameScreen.style.display = 'block';
+  if (displayRoomId) displayRoomId.textContent = roomId;
+  
+  if (gameState) {
+    updatePlayerList(gameState.users || []);
+    if (gameState.history) {
+      chatHistory.innerHTML = '';
+      gameState.history.forEach(item => appendMessage(item));
+    }
   }
 }
 
-// Socket 이벤트 리스너 설정
-socket.on('roomCreated', ({ roomCode, players }) => {
-  currentRoomCode = roomCode;
-  roomCodeDisplay.innerText = `ROOM: ${roomCode}`;
-  updatePlayerList(players);
-  menuDiv.classList.add('hidden');
-  lobbyDiv.classList.remove('hidden');
-});
-
-socket.on('roomJoined', ({ roomCode, players }) => {
-  currentRoomCode = roomCode;
-  roomCodeDisplay.innerText = `ROOM: ${roomCode}`;
-  updatePlayerList(players);
-  menuDiv.classList.add('hidden');
-  lobbyDiv.classList.remove('hidden');
-});
-
-socket.on('updatePlayers', ({ players }) => {
-  updatePlayerList(players);
-});
-
-socket.on('gameStarted', ({ currentTurnPlayer }) => {
-  lobbyDiv.classList.add('hidden');
-  gameDiv.classList.remove('hidden');
-  appendMessage('SYSTEM', '게임이 시작되었습니다! AI가 비밀 단어를 지정했습니다.');
-  updateTurn(currentTurnPlayer);
-});
-
-socket.on('newMessage', ({ sender, text }) => {
-  appendMessage(sender, text);
-});
-
-socket.on('updateTurn', ({ currentTurnPlayer }) => {
-  updateTurn(currentTurnPlayer);
-});
-
-socket.on('errorMsg', (msg) => {
-  alert(msg);
-});
-
-function updatePlayerList(players) {
+// ⚠️ 핵심 방어 로직: users 데이터가 없거나 배열이 아니어도 터지지 않음
+function updatePlayerList(users) {
+  if (!playerList) return;
   playerList.innerHTML = '';
-  players.forEach(p => {
+  
+  const userArray = Array.isArray(users) ? users : [];
+  userArray.forEach(u => {
     const li = document.createElement('li');
-    li.innerText = p.name;
+    li.textContent = u.username || '익명';
     playerList.appendChild(li);
   });
 }
 
-function updateTurn(player) {
-  if (player.id === socket.id) {
-    turnInfo.innerText = '★ 당신의 차례입니다! (질문 또는 정답 입력)';
-  } else {
-    turnInfo.innerText = `${player.name} 님의 차례입니다...`;
-  }
-}
-
-function appendMessage(sender, text) {
-  const p = document.createElement('p');
-  p.style.margin = '4px 0';
-  p.innerHTML = `<strong>${sender}:</strong> ${text}`;
-  chatBox.appendChild(p);
-  chatBox.scrollTop = chatBox.scrollHeight;
+function appendMessage(data) {
+  if (!chatHistory) return;
+  const msgDiv = document.createElement('div');
+  msgDiv.className = 'chat-item';
+  msgDiv.style.marginBottom = '10px';
+  msgDiv.innerHTML = `
+    <strong>[질문 ${data.questionCount}] ${data.user}:</strong> ${data.question}<br>
+    <span style="color: #4CAF50; font-weight: bold;">└ AI: ${data.answer}</span>
+  `;
+  chatHistory.appendChild(msgDiv);
+  chatHistory.scrollTop = chatHistory.scrollHeight;
 }
