@@ -51,9 +51,9 @@ io.on('connection', (socket) => {
     try {
       // Gemini API를 사용하여 정답 단어 선정
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: '스무고개 게임용 단어를 딱 1개만 정해줘. 쉬운 명사여야 하고 (예: 사과, 호랑이, 냉장고), 오직 단어 이름만 출력해.'
-      });
+    model: 'gemini-1.5-flash',
+    contents: '스무고개 게임용 단어를 딱 1개만 정해줘. 한국어로 된 쉬운 명사여야 하고 (예: 사과, 호랑이, 냉장고), 오직 단어 이름만 출력해.'
+  });
       
       room.secretWord = response.text.trim();
       room.isPlaying = true;
