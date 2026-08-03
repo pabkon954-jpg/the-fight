@@ -1,163 +1,154 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const { GoogleGenAI } = require('@google/genai');
+import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import Groq from 'groq-sdk';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
-// Gemini API 초기화
-const apiKey = process.env.GEMINI_API_KEY;
-const ai = new GoogleGenAI({ apiKey: apiKey });
+// 정적 파일 제공 (public 폴더)
+app.use(express.static(path.join(__dirname, 'public')));
 
-app.use(express.static(__dirname));
+// Groq API 클라이언트 초기화 (환경변수 GROQ_API_KEY 사용)
+const groq = new Groq({ 
+  apiKey: process.env.GROQ_API_KEY 
+});
 
-const rooms = {};
+// 게임 상태 관리
+let gameState = {
+  targetWord: "사과", // 기본 정답 (필요시 변경 가능)
+  questionCount: 0,
+  maxQuestions: 20,
+  isGameOver: false,
+  history: []
+};
 
-// 비상용 단어 리스트 (API 장애 시 사용)
-const fallbackWords = ['사과', '바나나', '호랑이', '냉장고', '자전거', '피아노', '컴퓨터', '비행기'];
+/**
+ * Groq AI에게 질문을 보내고 답변을 받는 함수
+ */
+async function askAI(userQuestion) {
+  try {
+    const prompt = `
+당신은 스무고개 게임의 AI 출제자입니다.
+현재 정답 단어는 "${gameState.targetWord}" 입니다.
+플레이어의 질문: "${userQuestion}"
 
-function generateRoomCode() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
+규칙:
+1. 답변은 반드시 "예", "아니오", 또는 "관련 없음/알 수 없음" 중 하나로 시작하세요.
+2. 부연 설명이 필요하다면 한 문장 이내로 아주 짧게 덧붙이세요.
+3. 정답 단어를 직접적으로 언급하지 마세요.
+`;
+
+    const completion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      model: 'llama-3.1-8b-instant', // 무료로 사용 가능한 가벼운 Llama 모델
+      temperature: 0.2,
+      max_tokens: 150
+    });
+
+    return completion.choices[0]?.message?.content?.trim() || "네/아니오로 답변하기 어렵습니다.";
+  } catch (error) {
+    console.error('Groq API Error:', error.message);
+    
+    // API 장애/에러 발생 시 게임이 튕기지 않도록 기본 Fallback 응답 제공
+    if (userQuestion.includes(gameState.targetWord)) {
+      return "예! 정답입니다!";
+    }
+    return "[시스템] AI 응답 지연으로 기본 답변을 제공합니다: 관련이 없거나 알 수 없습니다.";
+  }
 }
 
+// Socket.io 통신 로직
 io.on('connection', (socket) => {
-  console.log('플레이어 접속:', socket.id);
+  console.log('클라이언트 연결됨:', socket.id);
 
-  // 방 생성
-  socket.on('createRoom', ({ name }) => {
-    const roomCode = generateRoomCode();
-    rooms[roomCode] = {
-      players: [{ id: socket.id, name }],
-      isPlaying: false,
-      secretWord: '',
-      history: [],
-      currentTurnIndex: 0
+  // 접속 시 현재 게임 상태 전달
+  socket.emit('gameState', gameState);
+
+  // 플레이어가 질문 또는 정답을 입력했을 때
+  socket.on('sendQuestion', async (data) => {
+    if (gameState.isGameOver) {
+      socket.emit('errorMessage', '이미 게임이 종료되었습니다.');
+      return;
+    }
+
+    const userQuestion = data.question.trim();
+    if (!userQuestion) return;
+
+    // 질문 횟수 증가
+    gameState.questionCount += 1;
+
+    // 정답 맞춤 여부 확인
+    if (userQuestion === gameState.targetWord) {
+      gameState.isGameOver = true;
+      const resultData = {
+        questionCount: gameState.questionCount,
+        user: data.username || '익명',
+        question: userQuestion,
+        answer: `🎉 정답입니다! 정답은 [${gameState.targetWord}]였습니다!`,
+        isGameOver: true,
+        isSuccess: true
+      };
+      gameState.history.push(resultData);
+      io.emit('newAnswer', resultData);
+      return;
+    }
+
+    // AI에게 질문 던지기
+    const aiAnswer = await askAI(userQuestion);
+
+    // 20고개 초과 여부 확인
+    if (gameState.questionCount >= gameState.maxQuestions) {
+      gameState.isGameOver = true;
+    }
+
+    const turnResult = {
+      questionCount: gameState.questionCount,
+      user: data.username || '익명',
+      question: userQuestion,
+      answer: aiAnswer,
+      isGameOver: gameState.isGameOver,
+      isSuccess: false
     };
-    socket.join(roomCode);
-    socket.emit('roomCreated', { roomCode, players: rooms[roomCode].players });
+
+    gameState.history.push(turnResult);
+    io.emit('newAnswer', turnResult);
   });
 
-  // 방 참가
-  socket.on('joinRoom', ({ name, roomCode }) => {
-    const room = rooms[roomCode];
-    if (!room) return socket.emit('errorMsg', '방이 존재하지 않습니다.');
-    if (room.isPlaying) return socket.emit('errorMsg', '이미 게임이 진행 중입니다.');
-
-    room.players.push({ id: socket.id, name });
-    socket.join(roomCode);
-    socket.emit('roomJoined', { roomCode, players: room.players });
-    io.to(roomCode).emit('updatePlayers', { players: room.players });
+  // 게임 리셋 요청
+  socket.on('resetGame', (newWord) => {
+    gameState = {
+      targetWord: newWord || "바나나",
+      questionCount: 0,
+      maxQuestions: 20,
+      isGameOver: false,
+      history: []
+    };
+    io.emit('gameReset', gameState);
   });
 
-  // 게임 시작
-  socket.on('startGame', async ({ roomCode }) => {
-    console.log('서버 startGame 수신, roomCode:', roomCode);
-    const room = rooms[roomCode];
-    if (!room) return socket.emit('errorMsg', '방을 찾을 수 없습니다.');
-
-    // 랜덤 기본 단어 세팅 (API 에러 대비)
-    let secretWord = fallbackWords[Math.floor(Math.random() * fallbackWords.length)];
-
-    try {
-      const response = await ai.models.generateContent({
-  model: 'gemini-2.0-flash-lite', // <- -lite 추가
-  contents: '스무고개 게임용 단어를 딱 1개만 정해줘. 한국어로 된 쉬운 명사여야 하고 (예: 사과, 호랑이, 냉장고), 오직 단어 이름만 출력해.'
-});
-      
-      if (response && response.text) {
-        const cleanText = response.text.trim().replace(/[^가-힣a-zA-Z0-9]/g, '');
-        if (cleanText) secretWord = cleanText;
-      }
-    } catch (err) {
-      console.error('Gemini API Start Error:', err.message || err);
-    }
-
-    room.secretWord = secretWord;
-    room.isPlaying = true;
-    room.currentTurnIndex = 0;
-    room.history = [];
-
-    console.log(`[${roomCode}] 게임 시작! 선택된 비밀 단어:`, room.secretWord);
-
-    io.to(roomCode).emit('gameStarted', {
-      currentTurnPlayer: room.players[room.currentTurnIndex]
-    });
-  });
-
-  // 질문 및 정답 처리
-  socket.on('sendQuestion', async ({ roomCode, text }) => {
-    const room = rooms[roomCode];
-    if (!room || !room.isPlaying) return;
-
-    const currentPlayer = room.players[room.currentTurnIndex];
-    if (currentPlayer.id !== socket.id) {
-      return socket.emit('errorMsg', '당신의 차례가 아닙니다!');
-    }
-
-    // 플레이어 질문 메시지 방송
-    io.to(roomCode).emit('newMessage', { sender: currentPlayer.name, text });
-
-    let aiReply = '';
-
-    try {
-      const prompt = `
-        너는 스무고개 게임의 AI 사회자야.
-        비밀 단어: "${room.secretWord}"
-        
-        플레이어 질문/정답시도: "${text}"
-        
-        규칙:
-        1. 질문이라면 '네', '아니오', '관련없음' 중 하나로 답변하고 1문장으로 짧게 설명을 붙여줘.
-        2. 플레이어가 정답을 정확히 맞췄다면 "정답입니다!"라고 정확히 말해줘.
-      `;
-
-      const response = await ai.models.generateContent({
-  model: 'gemini-2.0-flash-lite', // <- -lite 추가
-  contents: prompt
-});
-
-      if (response && response.text) {
-        aiReply = response.text.trim();
-      }
-    } catch (err) {
-      console.error('AI Reply Error Details:', err.message || err);
-      
-      // API 연결 실패 시 백엔드 자체 폴백 로직 (게임이 멈추지 않음)
-      if (text.includes(room.secretWord)) {
-        aiReply = "정답입니다!";
-      } else {
-        aiReply = "아니오 (AI 상태 불안정으로 기본 답변됩니다)";
-      }
-    }
-
-    // AI 사회자 답변 방송
-    io.to(roomCode).emit('newMessage', { sender: 'AI 사회자', text: aiReply });
-
-    // 정답 확인 및 턴 넘김 처리
-    if (aiReply.includes('정답입니다')) {
-      io.to(roomCode).emit('newMessage', { sender: 'SYSTEM', text: `🎉 축하합니다! 정답은 [${room.secretWord}] 이었습니다!` });
-      room.isPlaying = false;
-    } else {
-      room.currentTurnIndex = (room.currentTurnIndex + 1) % room.players.length;
-      io.to(roomCode).emit('updateTurn', { currentTurnPlayer: room.players[room.currentTurnIndex] });
-    }
-  });
-
-  // 접속 종료
   socket.on('disconnect', () => {
-    for (const roomCode in rooms) {
-      const room = rooms[roomCode];
-      room.players = room.players.filter(p => p.id !== socket.id);
-      if (room.players.length === 0) {
-        delete rooms[roomCode];
-      } else {
-        io.to(roomCode).emit('updatePlayers', { players: room.players });
-      }
-    }
+    console.log('클라이언트 연결 해제됨:', socket.id);
   });
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`서버 실행 완료: 포트 ${PORT}`));
+httpServer.listen(PORT, () => {
+  console.log(`🚀 서버가 포트 ${PORT}에서 실행 중입니다.`);
+});
