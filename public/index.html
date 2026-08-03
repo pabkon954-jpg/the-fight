@@ -4,47 +4,52 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 협동 스무고개</title>
-  <style>
-    body { font-family: sans-serif; background-color: #121212; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-    .card { background: #1e1e1e; padding: 20px; border-radius: 12px; width: 350px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
-    input, button { width: 90%; padding: 10px; margin: 8px 0; border-radius: 6px; border: none; font-size: 16px; }
-    button { background-color: #4CAF50; color: white; cursor: pointer; font-weight: bold; }
-    button:hover { background-color: #45a049; }
-    .player-list { list-style: none; padding: 0; text-align: left; }
-    .player-list li { background: #2a2a2a; padding: 8px; margin: 4px 0; border-radius: 4px; }
-    #chat-box { height: 200px; overflow-y: auto; background: #2a2a2a; border-radius: 6px; padding: 10px; text-align: left; font-size: 14px; margin-bottom: 10px; }
-    .hidden { display: none; }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <div class="container">
+    <h1>AI 협동 스무고개</h1>
 
-  <!-- 메뉴 화면 -->
-  <div id="menu" class="card">
-    <h2>AI 협동 스무고개</h2>
-    <input type="text" id="nickname-input" placeholder="닉네임 입력">
-    <button id="create-btn">방 만들기</button>
-    <input type="text" id="room-input" placeholder="방 코드 입력">
-    <button id="join-btn">방 참가</button>
-  </div>
+    <!-- 1. 대기실 화면 (로비) -->
+    <div id="lobby-screen">
+      <div class="input-group">
+        <input type="text" id="username-input" placeholder="닉네임 입력">
+      </div>
+      <div class="button-group">
+        <button id="create-room-btn">방 만들기</button>
+      </div>
+      <hr style="margin: 20px 0; border: 0.5px solid #444;">
+      <div class="input-group">
+        <input type="text" id="room-id-input" placeholder="방 코드 4자리 입력">
+        <button id="join-room-btn">방 참가하기</button>
+      </div>
+    </div>
 
-  <!-- 대기실 화면 -->
-  <div id="lobby" class="card hidden">
-    <h2 id="room-code-display">ROOM: ----</h2>
-    <h3>참여 플레이어</h3>
-    <ul id="player-list" class="player-list"></ul>
-    <button id="start-game-btn">게임 시작</button>
-  </div>
+    <!-- 2. 게임 진행 화면 -->
+    <div id="game-screen" style="display: none;">
+      <div class="game-header">
+        <h2>방 번호: <span id="display-room-id">-</span></h2>
+        <div>질문 횟수: <span id="question-count">0 / 20</span></div>
+      </div>
 
-  <!-- 게임 화면 -->
-  <div id="game" class="card hidden">
-    <h2>스무고개 진행 중</h2>
-    <div id="turn-info" style="color: #FFD700; margin-bottom: 8px;">관전 중...</div>
-    <div id="chat-box"></div>
-    <input type="text" id="question-input" placeholder="질문 또는 정답 입력...">
-    <button id="send-btn">전송</button>
+      <div class="player-section">
+        <h3>참여 중인 플레이어</h3>
+        <ul id="player-list"></ul>
+      </div>
+
+      <div class="chat-section">
+        <h3>질문 및 답변 기록</h3>
+        <div id="chat-history" style="height: 250px; overflow-y: auto; border: 1px solid #444; padding: 10px; margin-bottom: 10px;"></div>
+      </div>
+
+      <div class="input-section">
+        <input type="text" id="question-input" placeholder="질문 또는 정답을 입력하세요...">
+        <button id="send-question-btn">전송</button>
+      </div>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="script.js"></script>
+  <script src="script.js?v=4.0"></script>
 </body>
 </html>
