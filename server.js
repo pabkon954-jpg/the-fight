@@ -19,97 +19,85 @@ app.use(express.static(path.join(__dirname, 'public')));
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const rooms = {};
 
-// 🎯 실제 표준 한국어 명사로 구성된 엄선 단어 풀 (이상한 합성어 방지)
-const REAL_WORDS = [
-  "호랑이", "세탁기", "비행기", "떡볶이", "해바라기", "전자레인지", "인공위성", 
-  "회전목마", "피아노", "에펠탑", "자전거", "냉장고", "강아지", "고양이", "축구공", 
-  "우산", "안경", "시계", "스파게티", "컴퓨터", "스마트폰", "선풍기", "자동차", 
-  "부적", "선인장", "경찰관", "소방차", "헬리콥터", "도서관", "박물관", "놀이공원", 
-  "청청바지", "기타", "드럼", "바이올린", "돌고래", "펭귄", "북극곰", "상어", 
-  "망원경", "현미경", "지구본", "나침반", "우주선", "잠수함", "타자기", "카메라"
-];
+// 난이도별 단어 풀
+const WORD_POOLS = {
+  easy: ["사과", "바나나", "호랑이", "강아지", "고양이", "비행기", "컴퓨터", "스마트폰", "피자", "축구공", "냉장고", "자동차"],
+  normal: ["전자레인지", "인공위성", "회전목마", "피아노", "에펠탑", "선인장", "소방차", "도서관", "박물관", "나침반", "망원경", "잠수함"],
+  hard: ["주상절리", "측우기", "판소리", "해파리", "메트로놈", "피뢰침", "도굴꾼", "시계추", "모래시계", "굴삭기"],
+  extreme: ["힉스보손", "초신성", "아포크린샘", "오로라", "테세우스의배", "판게아", "양자얽힘", "스트롬볼리"]
+};
 
-// 카테고리
-const CATEGORIES = [
-  "음식/디저트", "전자기기/가전제품", "동물/곤충", "식물/꽃", "직업/역할",
-  "악기", "운동/스포츠", "우주/자연현상", "장소/건물", "의류/패션", "교통수단"
-];
-
-// 🤖 실존하는 단어 중에서만 선별 및 AI 추천 로직 조합
-async function generateRandomWordFromAI() {
+// 🤖 AI 단어 추출 (난이도 반영)
+async function generateWordByDifficulty(difficulty = 'normal') {
   try {
-    const randomCategory = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
-    const randomSeed = Math.floor(Math.random() * 1000);
-
     const prompt = `
-당신은 스무고개 게임의 출제자입니다.
-카테고리: [ ${randomCategory} ]
-시드: ${randomSeed}
-
-위 카테고리에 속하며, 한국어 국어사전에 실제로 등재되어 있는 명확하고 상식적인 명사 단어 1개만 추천하세요.
-- 존재하지 않는 이상한 단어, 신조어, 오타 같은 단어는 절대로 금지합니다.
-- 예: "호랑이", "세탁기", "도서관", "스파게티" 같은 실제 실존 단어만 가능.
-- 부연 설명 없이 오직 '단어 하나'만 딱 출력하세요.
+스무고개 게임용 한국어 명사 단어 1개를 선정하세요.
+난이도: [ ${difficulty} ] (easy: 쉬움/상식, normal: 일반, hard: 마이너/전문, extreme: 매우 난해/추상적)
+조건: 실존하는 한국어 단어 1개만 부연설명 없이 출력하세요.
 `;
 
     const completion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       model: 'llama-3.1-8b-instant',
-      temperature: 0.7,
-      top_p: 0.9
+      temperature: 0.8
     });
 
     const word = completion.choices[0]?.message?.content?.trim().replace(/[^가-힣]/g, '');
-    
-    // 검증: 2자 이상 6자 이하의 순수 한글 단어일 때만 채택, 아니면 단어 풀에서 랜덤 선택
-    if (word && word.length >= 2 && word.length <= 6) {
-      return word;
-    }
+    if (word && word.length >= 2 && word.length <= 8) return word;
   } catch (e) {
     console.error('단어 생성 오류:', e.message);
   }
-  
-  return REAL_WORDS[Math.floor(Math.random() * REAL_WORDS.length)];
+
+  const pool = WORD_POOLS[difficulty] || WORD_POOLS.normal;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// 🤖 사실에 기반한 정확한 AI 답변 생성 함수
-async function askAI(targetWord, userQuestion) {
+// 🤖 난이도별 AI 프롬프트 적용 답변 생성
+async function askAI(targetWord, userQuestion, difficulty) {
   try {
+    let stylePrompt = "1. 답변은 '예', '아니오', '관련 없음'으로 시작하고 한 문장 부연설명을 붙이세요.";
+    
+    if (difficulty === 'easy') {
+      stylePrompt = "1. '예', '아니오', '관련 없음'으로 시작하되, 플레이어가 맞추기 쉽도록 매우 친절하고 유용한 힌트를 한 문장 덧붙이세요.";
+    } else if (difficulty === 'hard') {
+      stylePrompt = "1. 단칼에 '예', '아니오', '관련 없음'으로만 단호하게 답변하고 부연설명을 최소화하세요.";
+    } else if (difficulty === 'extreme') {
+      stylePrompt = "1. 답변은 '예' 또는 '아니오'로 시작하되, 다소 비유적이거나 알쏭달쏭한 힌트를 주어 헷갈리게 만드세요.";
+    }
+
     const prompt = `
 당신은 스무고개 게임의 AI 출제자입니다.
 정답 단어: "${targetWord}"
 플레이어 질문: "${userQuestion}"
 
 [규칙]
-1. 정답 단어("${targetWord}")의 객관적이고 상식적인 사실에만 기반하여 답변하세요. 엉뚱하거나 사실과 다른 억측(예: 특정 대상만 쓴다는 오류)을 하지 마세요.
-2. 첫 단어는 반드시 "예", "아니오", "관련 없음" 중 하나로 시작하세요.
-3. 부연 설명이 필요한 경우, 객관적 사실 한 문장 이내로 짧게 작성하세요.
-4. 정답 단어 자체를 직접 언급하지 마세요.
+${stylePrompt}
+2. 정답 단어를 직접적으로 절대 말하지 마세요.
 `;
 
     const completion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       model: 'llama-3.1-8b-instant',
-      temperature: 0.1, // 사실적 답변을 위해 온도 낮춤
+      temperature: difficulty === 'extreme' ? 0.7 : 0.2,
       max_tokens: 150
     });
 
     return completion.choices[0]?.message?.content?.trim() || "네/아니오로 답변하기 어렵습니다.";
   } catch (error) {
-    console.error('Groq API Error:', error.message);
     return "관련이 없거나 알 수 없습니다.";
   }
 }
 
 io.on('connection', (socket) => {
 
-  // 1. 방 만들기
-  socket.on('createRoom', async ({ username }) => {
+  // 1. 방 만들기 (난이도 수신)
+  socket.on('createRoom', async ({ username, difficulty }) => {
     const roomId = Math.floor(1000 + Math.random() * 9000).toString();
-    const selectedWord = await generateRandomWordFromAI(); 
+    const selectedWord = await generateWordByDifficulty(difficulty); 
     
     rooms[roomId] = {
       targetWord: selectedWord,
+      difficulty: difficulty || 'normal',
       questionCount: 0,
       maxQuestions: 20,
       isGameOver: false,
@@ -122,11 +110,11 @@ io.on('connection', (socket) => {
     socket.roomId = roomId;
     socket.username = username;
 
-    console.log(`[방 생성] 코드: ${roomId} | 정답: ${selectedWord}`);
+    console.log(`[방 생성] 코드: ${roomId} | 난이도: ${difficulty} | 정답: ${selectedWord}`);
     socket.emit('roomCreated', { roomId, gameState: rooms[roomId] });
   });
 
-  // 2. 방 참가하기 (모든 기존 참여자에게 실시간 유저목록 및 턴 업데이트)
+  // 2. 방 참가하기
   socket.on('joinRoom', ({ roomId, username }) => {
     const room = rooms[roomId];
     if (!room) {
@@ -139,10 +127,7 @@ io.on('connection', (socket) => {
     socket.roomId = roomId;
     socket.username = username;
 
-    // 본인에게 방 정보 전달
     socket.emit('roomJoined', { roomId, gameState: room });
-    
-    // 방 전체에 유저 목록 및 현재 턴 상태 브로드캐스트 (방장 및 기존 플레이어 화면 갱신)
     io.to(roomId).emit('updateGameState', { 
       users: room.users, 
       currentTurnUser: room.users[room.currentTurnIndex]?.username 
@@ -167,14 +152,14 @@ io.on('connection', (socket) => {
 
     room.questionCount += 1;
 
-    // 정답 판정
+    // A. 정답을 맞춘 경우
     if (userQuestion === room.targetWord) {
       room.isGameOver = true;
       const resultData = {
         questionCount: room.questionCount,
         user: socket.username || '익명',
         question: userQuestion,
-        answer: `🎉 정답입니다! 정답은 [${room.targetWord}]였습니다!`,
+        answer: `🎉 정답입니다! 정답은 [ ${room.targetWord} ]였습니다!`,
         isGameOver: true,
         currentTurnUser: null
       };
@@ -183,11 +168,26 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // AI 질문 답변
-    const aiAnswer = await askAI(room.targetWord, userQuestion);
-    if (room.questionCount >= room.maxQuestions) room.isGameOver = true;
+    // B. AI 답변 생성
+    const aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
 
-    // 다음 턴
+    // C. 20개 질문 소진으로 게임 오버
+    if (room.questionCount >= room.maxQuestions) {
+      room.isGameOver = true;
+      const resultData = {
+        questionCount: room.questionCount,
+        user: socket.username || '익명',
+        question: userQuestion,
+        answer: `${aiAnswer} \n\n💀 20번의 질문을 모두 사용하셨습니다. 게임 오버! (정답: [ ${room.targetWord} ])`,
+        isGameOver: true,
+        currentTurnUser: null
+      };
+      room.history.push(resultData);
+      io.to(roomId).emit('newAnswer', resultData);
+      return;
+    }
+
+    // D. 정상 진행 -> 다음 턴
     room.currentTurnIndex = (room.currentTurnIndex + 1) % room.users.length;
     const nextTurnUser = room.users[room.currentTurnIndex].username;
 
@@ -196,7 +196,7 @@ io.on('connection', (socket) => {
       user: socket.username || '익명',
       question: userQuestion,
       answer: aiAnswer,
-      isGameOver: room.isGameOver,
+      isGameOver: false,
       currentTurnUser: nextTurnUser
     };
 
@@ -204,7 +204,27 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('newAnswer', turnResult);
   });
 
-  // 접속 해제
+  // 4. 게임 다시하기 (새 라운드 리셋)
+  socket.on('restartGame', async () => {
+    const roomId = socket.roomId;
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const newWord = await generateWordByDifficulty(room.difficulty);
+    room.targetWord = newWord;
+    room.questionCount = 0;
+    room.isGameOver = false;
+    room.history = [];
+    room.currentTurnIndex = 0;
+
+    console.log(`[게임 재시작] 방 코드: ${roomId} | 새 정답: ${newWord}`);
+
+    io.to(roomId).emit('gameRestarted', {
+      gameState: room,
+      currentTurnUser: room.users[0]?.username
+    });
+  });
+
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
     if (roomId && rooms[roomId]) {
