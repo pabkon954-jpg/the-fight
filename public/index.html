@@ -20,9 +20,9 @@
         <label for="difficulty-select" style="align-self: center; font-size: 0.9rem; color: #aaa;">난이도:</label>
         <select id="difficulty-select" style="flex: 1; padding: 10px; border-radius: 6px; background: #2a2a2a; color: #fff; border: 1px solid #444;">
           <option value="easy">쉬움 (친절한 힌트)</option>
-          <option value="normal" selected>보통 (일반적인 단어)</option>
+          <option value="normal" selected>보통 (일반 명사)</option>
           <option value="hard">어려움 (단답형 AI)</option>
-          <option value="extreme">극악무도 (은밀한 힌트)</option>
+          <option value="extreme">극악무도 (알쏭달쏭한 비유)</option>
         </select>
       </div>
 
@@ -58,11 +58,11 @@
         <button id="send-question-btn">전송</button>
       </div>
 
-      <button id="restart-btn" style="display: none; width: 100%; margin-top: 10px; background-color: #ff9800;">새 라운드 시작하기 🔄</button>
+      <button id="restart-btn" style="display: none; width: 100%; margin-top: 10px; background-color: #ff9800; color: #fff; font-weight: bold; padding: 12px; border: none; border-radius: 6px; cursor: pointer;">새 라운드 시작하기 🔄</button>
     </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="script.js?v=final"></script>
+  <script src="script.js?v=final2"></script>
 </body>
 </html>

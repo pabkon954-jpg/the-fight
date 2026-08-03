@@ -59,7 +59,7 @@ restartBtn.addEventListener('click', () => {
   socket.emit('restartGame');
 });
 
-// Socket 이벤트
+// Socket 이벤트 등록
 socket.on('roomCreated', ({ roomId, gameState }) => enterGame(roomId, gameState));
 socket.on('roomJoined', ({ roomId, gameState }) => enterGame(roomId, gameState));
 
@@ -92,7 +92,7 @@ socket.on('gameRestarted', ({ gameState, currentTurnUser }) => {
 
 socket.on('errorMessage', (msg) => alert(msg));
 
-// Helper 함수
+// 도우미 함수
 function enterGame(roomId, gameState) {
   if (lobbyScreen) lobbyScreen.style.display = 'none';
   if (gameScreen) gameScreen.style.display = 'block';
