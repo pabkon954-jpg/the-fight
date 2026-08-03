@@ -14,6 +14,14 @@ const questionInput = document.getElementById('question-input');
 const sendQuestionBtn = document.getElementById('send-question-btn');
 const questionCountText = document.getElementById('question-count');
 
+let turnNotice = document.getElementById('turn-notice');
+if (!turnNotice) {
+  turnNotice = document.createElement('div');
+  turnNotice.id = 'turn-notice';
+  turnNotice.style.cssText = 'color: #ffca28; font-weight: bold; margin-bottom: 12px; font-size: 1rem; padding: 8px; background: #2a2a2a; border-radius: 6px; text-align: center;';
+  document.querySelector('.player-section').after(turnNotice);
+}
+
 // 1. 방 만들기
 createRoomBtn.addEventListener('click', () => {
   const username = usernameInput.value.trim();
@@ -30,7 +38,7 @@ joinRoomBtn.addEventListener('click', () => {
   socket.emit('joinRoom', { roomId, username });
 });
 
-// 3. 질문 보내기
+// 3. 질문 전송
 function handleSendQuestion() {
   const question = questionInput.value.trim();
   if (!question) return;
@@ -43,16 +51,14 @@ questionInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') handleSendQuestion();
 });
 
-// 소켓 수신 이벤트
+// Socket 이벤트
 socket.on('roomCreated', ({ roomId, gameState }) => enterGame(roomId, gameState));
 socket.on('roomJoined', ({ roomId, gameState }) => enterGame(roomId, gameState));
 
-socket.on('userJoined', (data) => {
-  if (data && data.users) updatePlayerList(data.users);
-});
-
-socket.on('userLeft', (data) => {
-  if (data && data.users) updatePlayerList(data.users);
+// 신규 참가자 입장 시 방장을 포함한 모든 플레이어 화면 동기화
+socket.on('updateGameState', ({ users, currentTurnUser }) => {
+  updatePlayerList(users);
+  updateTurnNotice(currentTurnUser);
 });
 
 socket.on('newAnswer', (data) => {
@@ -60,11 +66,16 @@ socket.on('newAnswer', (data) => {
   if (questionCountText) {
     questionCountText.textContent = `${data.questionCount} / 20`;
   }
+  if (data.currentTurnUser) {
+    updateTurnNotice(data.currentTurnUser);
+  } else if (data.isGameOver) {
+    turnNotice.textContent = "🎮 게임이 종료되었습니다!";
+  }
 });
 
 socket.on('errorMessage', (msg) => alert(msg));
 
-// UI 헬퍼 함수
+// UI 업데이트 함수들
 function enterGame(roomId, gameState) {
   if (lobbyScreen) lobbyScreen.style.display = 'none';
   if (gameScreen) gameScreen.style.display = 'block';
@@ -72,6 +83,9 @@ function enterGame(roomId, gameState) {
   
   if (gameState) {
     updatePlayerList(gameState.users || []);
+    const turnUser = gameState.users[gameState.currentTurnIndex]?.username;
+    updateTurnNotice(turnUser);
+
     if (gameState.history) {
       chatHistory.innerHTML = '';
       gameState.history.forEach(item => appendMessage(item));
@@ -79,7 +93,12 @@ function enterGame(roomId, gameState) {
   }
 }
 
-// ⚠️ 핵심 방어 로직: users 데이터가 없거나 배열이 아니어도 터지지 않음
+function updateTurnNotice(turnUsername) {
+  if (turnNotice && turnUsername) {
+    turnNotice.textContent = `🎲 [ ${turnUsername} ] 님의 질문 차례입니다!`;
+  }
+}
+
 function updatePlayerList(users) {
   if (!playerList) return;
   playerList.innerHTML = '';
