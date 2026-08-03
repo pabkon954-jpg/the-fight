@@ -19,28 +19,48 @@ app.use(express.static(path.join(__dirname, 'public')));
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const rooms = {};
 
-// 🎯 Groq AI를 활용해 완전 무작위 명사 단어 1개 뽑기
+// 🎯 다양한 카테고리 목록 (AI의 단어 선택 폭을 대폭 확장)
+const CATEGORIES = [
+  "음식/디저트", "전자기기/가전제품", "동물/곤충", "식물/꽃", "직업/역할",
+  "악기", "운동/스포츠", "우주/자연현상", "영화/동화/만화 캐릭터", "장소/건물/랜드마크",
+  "의류/패션잡화", "학용품/문구류", "주방용품", "교통수단", "신체부위",
+  "취미/게임", "신화/전설", "역사적 인물", "가구/인테리어", "계절/날씨"
+];
+
+// 🤖 완전히 무작위적이고 방대한 단어를 만드는 AI 생성 함수
 async function generateRandomWordFromAI() {
   try {
+    const randomCategory = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+    const randomSeed = Math.floor(Math.random() * 1000);
+
+    const prompt = `
+당신은 스무고개 게임의 출제자입니다.
+카테고리: [ ${randomCategory} ]
+시드번호: ${randomSeed}
+
+위 카테고리에 속하는 한국어 명사 단어 1개를 아주 무작위로 하나 골라주세요.
+- 흔하고 뻔한 단어(사과, 비행기, 호랑이 등) 대신 매번 색다르고 재미있는 단어를 골라주세요.
+- 2글자에서 6글자 사이의 명사 단어여야 합니다.
+- 부연 설명, 공백, 특수문자, 따옴표 없이 오직 '단어 하나'만 딱 출력하세요.
+`;
+
     const completion = await groq.chat.completions.create({
-      messages: [{ 
-        role: 'user', 
-        content: '스무고개 게임용 한국어 명사 단어(예: 호랑이, 세탁기, 은하수, 비행기, 떡볶이 등) 하나만 무작위로 출력하세요. 다른 부연 설명, 공백, 특수문자 없이 단어만 한 단어로 출력하세요.' 
-      }],
+      messages: [{ role: 'user', content: prompt }],
       model: 'llama-3.1-8b-instant',
-      temperature: 1.0 // 창의성/무작위성 극대화
+      temperature: 1.2, // 무작위성 극대화
+      top_p: 0.95
     });
-    
-    // 특수문자 및 공백 제거 후 순수 단어만 추출
-    const word = completion.choices[0]?.message?.content?.trim().replace(/[^가-힣a-zA-A0-9]/g, '');
-    return word || "사과";
+
+    const word = completion.choices[0]?.message?.content?.trim().replace(/[^가-힣a-zA-Z0-9]/g, '');
+    return word || "스파게티";
   } catch (e) {
-    console.error('단어 생성 중 오류 발생:', e.message);
-    return "바나나";
+    console.error('단어 생성 오류:', e.message);
+    const backupWords = ["해바라기", "인공위성", "전자레인지", "돌고래", "회전목마", "피아노", "에펠탑"];
+    return backupWords[Math.floor(Math.random() * backupWords.length)];
   }
 }
 
-// 🤖 AI 답변 생성 (네/아니오)
+// 🤖 AI 답변 생성 함수 (네/아니오 및 힌트)
 async function askAI(targetWord, userQuestion) {
   try {
     const prompt = `
@@ -70,7 +90,7 @@ async function askAI(targetWord, userQuestion) {
 
 io.on('connection', (socket) => {
 
-  // 1. 방 만들기 (AI가 랜덤 단어 설정)
+  // 1. 방 만들기 (카테고리 기반 무작위 단어 지정)
   socket.on('createRoom', async ({ username }) => {
     const roomId = Math.floor(1000 + Math.random() * 9000).toString();
     const selectedWord = await generateRandomWordFromAI(); 
@@ -113,14 +133,14 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 3. 질문/정답 전송 및 턴 관리
+  // 3. 질문 및 정답 처리 (순서 턴제)
   socket.on('sendQuestion', async ({ question }) => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
 
     if (!room || room.isGameOver) return;
 
-    // 현재 턴 유저 체크
+    // 현재 턴 유저 검증
     const currentTurnUser = room.users[room.currentTurnIndex];
     if (currentTurnUser.id !== socket.id) {
       socket.emit('errorMessage', `지금은 ${currentTurnUser.username} 님의 턴입니다!`);
@@ -152,7 +172,7 @@ io.on('connection', (socket) => {
     const aiAnswer = await askAI(room.targetWord, userQuestion);
     if (room.questionCount >= room.maxQuestions) room.isGameOver = true;
 
-    // 턴 넘기기
+    // 다음 순서로 턴 넘기기
     room.currentTurnIndex = (room.currentTurnIndex + 1) % room.users.length;
     const nextTurnUser = room.users[room.currentTurnIndex].username;
 
@@ -169,7 +189,7 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('newAnswer', turnResult);
   });
 
-  // 접속 종료 처리
+  // 접속 종료 시 처리
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
     if (roomId && rooms[roomId]) {
