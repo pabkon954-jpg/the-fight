@@ -95,11 +95,10 @@ io.on('connection', (socket) => {
         2. 플레이어가 정답을 정확히 맞췄다면 "정답입니다!"라고 말해줘.
       `;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
-      });
-
+     const response = await ai.models.generateContent({
+    model: 'gemini-1.5-flash',
+    contents: prompt
+  });
       const aiReply = response.text.trim();
       io.to(roomCode).emit('newMessage', { sender: 'AI 사회자', text: aiReply });
 
