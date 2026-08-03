@@ -2,14 +2,16 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>IO Game</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 협동 스무고개</title>
 <style>
     html, body {
         margin: 0;
         padding: 0;
-        overflow: hidden;
-        background: #111;
-        font-family: sans-serif;
+        height: 100%;
+        background: #121212;
+        color: white;
+        font-family: 'Pretendard', sans-serif;
         user-select: none;
     }
 
@@ -22,303 +24,238 @@
         justify-content: center;
         align-items: center;
         gap: 16px;
-        color: white;
+        background: #121212;
         z-index: 20;
+    }
+
+    #menu h1 {
+        font-size: 36px;
+        margin-bottom: 10px;
+        color: #4caf50;
     }
 
     #menu button, #menu input {
         font-size: 18px;
-        padding: 10px 16px;
-        border-radius: 6px;
+        padding: 12px 18px;
+        border-radius: 8px;
         border: none;
+        outline: none;
+    }
+
+    #menu input {
+        background: #222;
+        color: white;
+        border: 1px solid #444;
+        text-align: center;
     }
 
     #menu button {
-        background: #4a4a4a;
+        background: #4caf50;
         color: white;
+        font-weight: bold;
         cursor: pointer;
+        transition: background 0.2s;
     }
 
     #menu button:hover {
-        background: #666;
+        background: #45a049;
     }
 
-    /* ============ LOBBY (대기/캐릭터 선택) ============ */
+    /* ============ LOBBY (대기실) ============ */
     #lobby {
         position: fixed;
         inset: 0;
         display: none;
         flex-direction: column;
         align-items: center;
-        color: white;
+        justify-content: center;
         z-index: 15;
+        background: #181818;
         padding: 30px;
-        box-sizing: border-box;
     }
 
     #lobbyRoomCode {
-        font-size: 22px;
+        font-size: 28px;
+        font-weight: bold;
+        color: #ffd23f;
         margin-bottom: 20px;
     }
 
-    #lobbyMain {
-        display: flex;
-        gap: 40px;
-        width: 100%;
-        max-width: 900px;
-        justify-content: center;
-    }
-
-    /* 캐릭터 선택 카드 영역 */
-    #characterSelect {
-        display: flex;
-        gap: 20px;
-    }
-
-    .char-card {
-        width: 140px;
-        padding: 16px;
-        border: 3px solid #444;
-        border-radius: 10px;
-        background: #222;
-        cursor: pointer;
-        text-align: center;
-        transition: border-color 0.15s, transform 0.1s;
-    }
-
-    .char-card:hover {
-        transform: translateY(-3px);
-    }
-
-    .char-card.selected {
-        border-color: #ffd23f;
-    }
-
-    .char-swatch {
-        width: 60px;
-        height: 60px;
-        border-radius: 50%;
-        margin: 0 auto 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-    }
-
-    .char-swatch svg {
-        width: 100%;
-        height: 100%;
-    }
-
-    .char-name {
-        font-weight: bold;
-        margin-bottom: 6px;
-    }
-
-    .char-stats {
-        font-size: 12px;
-        color: #aaa;
-        line-height: 1.4;
-    }
-
-    /* 대기 인원 목록 */
     #playerList {
-        width: 220px;
-        background: #1c1c1c;
-        border-radius: 10px;
-        padding: 16px;
-    }
-
-    #playerList h3 {
-        margin-top: 0;
-        font-size: 16px;
-        color: #ccc;
+        width: 320px;
+        background: #242424;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
     }
 
     .player-row {
         display: flex;
         justify-content: space-between;
-        align-items: center;
-        padding: 8px 6px;
+        padding: 10px 0;
         border-bottom: 1px solid #333;
-        font-size: 14px;
     }
-
-    .player-row .host-tag {
-        color: #ffd23f;
-        font-size: 11px;
-        margin-left: 4px;
-    }
-
-    .player-row .ready-tag {
-        font-size: 12px;
-    }
-
-    .ready-tag.yes { color: #4caf50; }
-    .ready-tag.no { color: #888; }
 
     #startBtn {
-        margin-top: 24px;
         font-size: 20px;
-        padding: 12px 30px;
+        padding: 12px 36px;
         border-radius: 8px;
         border: none;
         background: #4caf50;
         color: white;
+        font-weight: bold;
         cursor: pointer;
     }
 
     #startBtn:disabled {
-        background: #555;
+        background: #444;
         cursor: not-allowed;
     }
 
-    #lobbyMessage {
-        margin-top: 10px;
-        color: #ff6b6b;
-        height: 20px;
-        font-size: 14px;
-    }
-
-    /* ============ GAME ============ */
-    #player {
-        width: 50px;
-        height: 50px;
-        border-radius: 50%;
-        background: yellow;
-        position: absolute;
-        z-index: 1;
-        background-size: cover;
-        background-position: center;
-    }
-
-    /* 맵 바닥 타일 패턴 */
-    #mapBackground {
-        position: absolute;
-        left: 0;
-        top: 0;
-        z-index: 0;
+    /* ============ GAME (스무고개 게임 화면) ============ */
+    #game {
+        display: none;
+        flex-direction: column;
+        max-width: 800px;
+        height: 100vh;
+        margin: 0 auto;
+        padding: 20px;
         box-sizing: border-box;
-        border: 6px solid #555;
-        background-color: #1f1f1f;
-        background-image:
-            linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px);
-        background-size: 50px 50px;
-        display: none;
     }
 
-    /* ============ SKILL BAR ============ */
-    #skillBar {
-        position: fixed;
-        bottom: 24px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: none;
-        gap: 14px;
-        z-index: 6;
-    }
-
-    .skill-slot {
-        width: 60px;
-        height: 60px;
-        border-radius: 10px;
-        background: #2a2a2a;
-        border: 2px solid #555;
-        position: relative;
+    #gameHeader {
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        justify-content: center;
-        color: white;
-        font-size: 14px;
-        font-weight: bold;
-        overflow: hidden;
+        background: #222;
+        padding: 16px 24px;
+        border-radius: 12px;
+        margin-bottom: 16px;
     }
 
-    .skill-slot .key-label {
-        position: absolute;
-        top: 3px;
-        left: 6px;
-        font-size: 11px;
-        color: #aaa;
-    }
-
-    .skill-slot .skill-icon {
-        font-size: 26px;
-    }
-
-    .skill-slot .cooldown-overlay {
-        position: absolute;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        background: rgba(0,0,0,0.75);
-        height: 0%;
-        transition: height 0.1s linear;
-    }
-
-    .skill-slot .cooldown-text {
-        position: absolute;
-        font-size: 18px;
-        color: #fff;
-        font-weight: bold;
-        z-index: 2;
-        display: none;
-    }
-
-    /* ============ BLIND OVERLAY (시야 방해) ============ */
-    #blindOverlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(20, 15, 5, 0.85);
-        backdrop-filter: blur(6px);
-        z-index: 22;
-        display: none;
-        pointer-events: none;
-    }
-
-    /* ============ STUN EFFECT (기절) ============ */
-    .stun-icon {
-        position: absolute;
+    .count-badge {
         font-size: 22px;
-        z-index: 4;
-        pointer-events: none;
+        font-weight: bold;
+        color: #ffd23f;
     }
+
+    .turn-badge {
+        font-size: 16px;
+        color: #81c784;
+    }
+
+    /* 질문 및 대화 로그 */
+    #chatLog {
+        flex: 1;
+        background: #1e1e1e;
+        border-radius: 12px;
+        padding: 20px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        border: 1px solid #333;
+    }
+
+    .msg-box {
+        max-width: 80%;
+        padding: 12px 16px;
+        border-radius: 10px;
+        line-height: 1.4;
+    }
+
+    .msg-player {
+        align-self: flex-end;
+        background: #2e7d32;
+        color: white;
+    }
+
+    .msg-ai {
+        align-self: flex-start;
+        background: #333;
+        border: 1px solid #555;
+        color: #e0e0e0;
+    }
+
+    .msg-system {
+        align-self: center;
+        background: transparent;
+        color: #888;
+        font-size: 14px;
+    }
+
+    /* 입력 영역 */
+    #inputArea {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    #questionInput {
+        flex: 1;
+        padding: 14px;
+        border-radius: 8px;
+        border: 1px solid #444;
+        background: #222;
+        color: white;
+        font-size: 16px;
+    }
+
+    .btn-action {
+        padding: 0 20px;
+        border-radius: 8px;
+        border: none;
+        font-weight: bold;
+        cursor: pointer;
+        font-size: 16px;
+    }
+
+    #sendQBtn { background: #2196f3; color: white; }
+    #sendAnsBtn { background: #e91e63; color: white; }
 </style>
 </head>
 <body>
 
-    <!-- ===== MENU ===== -->
+    <!-- ===== MENU (방 생성/입장) ===== -->
     <div id="menu">
-        <h1>IO Game</h1>
-        <button id="createRoomBtn">방 만들기</button>
-        <div>
-            <input id="roomInput" placeholder="방 코드 입력" maxlength="4">
+        <h1>🤖 AI 협동 스무고개</h1>
+        <button id="createRoomBtn">새 방 만들기</button>
+        <div style="display: flex; gap: 8px;">
+            <input id="roomInput" placeholder="방 코드 4자리" maxlength="4">
             <button id="joinRoomBtn">입장하기</button>
         </div>
     </div>
 
-    <!-- ===== LOBBY ===== -->
+    <!-- ===== LOBBY (대기실) ===== -->
     <div id="lobby">
         <div id="lobbyRoomCode">ROOM: ----</div>
-
-        <div id="lobbyMain">
-            <div id="characterSelect"></div>
-            <div id="playerList">
-                <h3>대기 중인 플레이어</h3>
-                <div id="playerListItems"></div>
-            </div>
+        <div id="playerList">
+            <h3 style="margin-top:0; text-align:center;">참여 플레이어</h3>
+            <div id="playerListItems"></div>
         </div>
-
-        <button id="startBtn" disabled>시작</button>
-        <div id="lobbyMessage"></div>
+        <button id="startBtn" disabled>게임 시작</button>
     </div>
 
-    <!-- ===== GAME ===== -->
-    <div id="mapBackground"></div>
-    <div id="player"></div>
-    <div id="skillBar"></div>
-    <div id="blindOverlay"></div>
+    <!-- ===== GAME (스무고개 메인) ===== -->
+    <div id="game">
+        <div id="gameHeader">
+            <div>
+                <span>남은 질문: </span>
+                <span id="qCount" class="count-badge">20</span> / 20
+            </div>
+            <div id="currentTurn" class="turn-badge">현재 차례: 대기 중...</div>
+        </div>
+
+        <div id="chatLog">
+            <div class="msg-box msg-system">AI가 정답 단어를 생성 중입니다...</div>
+        </div>
+
+        <div id="inputArea">
+            <input id="questionInput" placeholder="질문이나 정답을 입력하세요..." disabled>
+            <button id="sendQBtn" class="btn-action" disabled>질문하기</button>
+            <button id="sendAnsBtn" class="btn-action" disabled>정답 도전</button>
+        </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
