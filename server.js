@@ -61,11 +61,10 @@ io.on('connection', (socket) => {
     let secretWord = fallbackWords[Math.floor(Math.random() * fallbackWords.length)];
 
     try {
-      console.log('Gemini API 단어 생성 시도 중...');
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: '스무고개 게임용 단어를 딱 1개만 정해줘. 한국어로 된 쉬운 명사여야 하고 (예: 사과, 호랑이, 냉장고), 오직 단어 이름만 출력해.'
-      });
+  model: 'gemini-2.0-flash-lite', // <- -lite 추가
+  contents: '스무고개 게임용 단어를 딱 1개만 정해줘. 한국어로 된 쉬운 명사여야 하고 (예: 사과, 호랑이, 냉장고), 오직 단어 이름만 출력해.'
+});
       
       if (response && response.text) {
         const cleanText = response.text.trim().replace(/[^가-힣a-zA-Z0-9]/g, '');
@@ -115,9 +114,9 @@ io.on('connection', (socket) => {
       `;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: prompt
-      });
+  model: 'gemini-2.0-flash-lite', // <- -lite 추가
+  contents: prompt
+});
 
       if (response && response.text) {
         aiReply = response.text.trim();
