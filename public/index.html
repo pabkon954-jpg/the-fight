@@ -16,14 +16,13 @@
         <input type="text" id="username-input" placeholder="닉네임 입력">
       </div>
       
-      <!-- 난이도 선택 드롭다운 -->
       <div class="input-group" style="margin-top: 10px;">
         <label for="difficulty-select" style="align-self: center; font-size: 0.9rem; color: #aaa;">난이도:</label>
         <select id="difficulty-select" style="flex: 1; padding: 10px; border-radius: 6px; background: #2a2a2a; color: #fff; border: 1px solid #444;">
           <option value="easy">쉬움 (친절한 힌트)</option>
           <option value="normal" selected>보통 (일반적인 단어)</option>
-          <option value="hard">어려움 (어려운 단어)</option>
-          <option value="extreme">극악무도 (AI의 은밀한 힌트)</option>
+          <option value="hard">어려움 (단답형 AI)</option>
+          <option value="extreme">극악무도 (은밀한 힌트)</option>
         </select>
       </div>
 
@@ -37,7 +36,7 @@
       </div>
     </div>
 
-    <!-- 2. 게임 진행 화면 -->
+    <!-- 2. 게임 화면 -->
     <div id="game-screen" style="display: none;">
       <div class="game-header">
         <h2>방 번호: <span id="display-room-id">-</span></h2>
@@ -59,12 +58,11 @@
         <button id="send-question-btn">전송</button>
       </div>
 
-      <!-- 게임 오버 시 나타날 다시하기 버튼 -->
       <button id="restart-btn" style="display: none; width: 100%; margin-top: 10px; background-color: #ff9800;">새 라운드 시작하기 🔄</button>
     </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="script.js?v=5.0"></script>
+  <script src="script.js?v=final"></script>
 </body>
 </html>

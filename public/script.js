@@ -54,12 +54,12 @@ questionInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') handleSendQuestion();
 });
 
-// 4. 게임 다시하기 버튼 클릭
+// 4. 새 라운드 시작
 restartBtn.addEventListener('click', () => {
   socket.emit('restartGame');
 });
 
-// Socket 이벤트 처리
+// Socket 이벤트
 socket.on('roomCreated', ({ roomId, gameState }) => enterGame(roomId, gameState));
 socket.on('roomJoined', ({ roomId, gameState }) => enterGame(roomId, gameState));
 
@@ -76,13 +76,12 @@ socket.on('newAnswer', (data) => {
   
   if (data.isGameOver) {
     turnNotice.textContent = "🎮 게임이 종료되었습니다!";
-    restartBtn.style.display = 'block'; // 다시하기 버튼 표시
+    restartBtn.style.display = 'block';
   } else if (data.currentTurnUser) {
     updateTurnNotice(data.currentTurnUser);
   }
 });
 
-// 게임 다시하기 이벤트
 socket.on('gameRestarted', ({ gameState, currentTurnUser }) => {
   chatHistory.innerHTML = '';
   questionCountText.textContent = '0 / 20';
@@ -93,7 +92,7 @@ socket.on('gameRestarted', ({ gameState, currentTurnUser }) => {
 
 socket.on('errorMessage', (msg) => alert(msg));
 
-// UI 도우미 함수들
+// Helper 함수
 function enterGame(roomId, gameState) {
   if (lobbyScreen) lobbyScreen.style.display = 'none';
   if (gameScreen) gameScreen.style.display = 'block';

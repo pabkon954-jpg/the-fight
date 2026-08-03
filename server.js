@@ -19,7 +19,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const rooms = {};
 
-// 난이도별 단어 풀
+// 난이도별 백업 단어 풀 (실존 한국어 명사)
 const WORD_POOLS = {
   easy: ["사과", "바나나", "호랑이", "강아지", "고양이", "비행기", "컴퓨터", "스마트폰", "피자", "축구공", "냉장고", "자동차"],
   normal: ["전자레인지", "인공위성", "회전목마", "피아노", "에펠탑", "선인장", "소방차", "도서관", "박물관", "나침반", "망원경", "잠수함"],
@@ -27,19 +27,19 @@ const WORD_POOLS = {
   extreme: ["힉스보손", "초신성", "아포크린샘", "오로라", "테세우스의배", "판게아", "양자얽힘", "스트롬볼리"]
 };
 
-// 🤖 AI 단어 추출 (난이도 반영)
+// 🤖 실존 단어 생성 함수
 async function generateWordByDifficulty(difficulty = 'normal') {
   try {
     const prompt = `
 스무고개 게임용 한국어 명사 단어 1개를 선정하세요.
-난이도: [ ${difficulty} ] (easy: 쉬움/상식, normal: 일반, hard: 마이너/전문, extreme: 매우 난해/추상적)
-조건: 실존하는 한국어 단어 1개만 부연설명 없이 출력하세요.
+난이도: [ ${difficulty} ] (easy: 쉬움/상식, normal: 일반, hard: 전문, extreme: 난해/추상)
+조건: 국어사전에 실존하는 한글 명사 단어 1개만 부연설명 및 특수문자 없이 오직 단어만 출력하세요.
 `;
 
     const completion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
       model: 'llama-3.1-8b-instant',
-      temperature: 0.8
+      temperature: 0.7
     });
 
     const word = completion.choices[0]?.message?.content?.trim().replace(/[^가-힣]/g, '');
@@ -52,45 +52,51 @@ async function generateWordByDifficulty(difficulty = 'normal') {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// 🤖 난이도별 AI 프롬프트 적용 답변 생성
+// 🤖 정답 보안 및 사실성 강화된 AI 답변 생성 함수
 async function askAI(targetWord, userQuestion, difficulty) {
   try {
-    let stylePrompt = "1. 답변은 '예', '아니오', '관련 없음'으로 시작하고 한 문장 부연설명을 붙이세요.";
-    
+    let difficultyRule = "";
+
     if (difficulty === 'easy') {
-      stylePrompt = "1. '예', '아니오', '관련 없음'으로 시작하되, 플레이어가 맞추기 쉽도록 매우 친절하고 유용한 힌트를 한 문장 덧붙이세요.";
+      difficultyRule = "답변 끝에 플레이어가 맞추기 쉽도록 객관적인 힌트를 한 문장 짧게 덧붙이세요.";
     } else if (difficulty === 'hard') {
-      stylePrompt = "1. 단칼에 '예', '아니오', '관련 없음'으로만 단호하게 답변하고 부연설명을 최소화하세요.";
+      difficultyRule = "부연설명 없이 오직 '예.', '아니오.', '관련 없음.' 세 가지 중 하나만 단답으로 출력하세요.";
     } else if (difficulty === 'extreme') {
-      stylePrompt = "1. 답변은 '예' 또는 '아니오'로 시작하되, 다소 비유적이거나 알쏭달쏭한 힌트를 주어 헷갈리게 만드세요.";
+      difficultyRule = "'예.' 또는 '아니오.'로 답하되, 약간 알쏭달쏭하고 비유적인 힌트를 한 문장 덧붙이세요.";
+    } else {
+      // normal
+      difficultyRule = "필요하다면 객관적 사실에 기반한 짧은 부연 설명(한 문장)을 덧붙이세요.";
     }
 
-    const prompt = `
-당신은 스무고개 게임의 AI 출제자입니다.
-정답 단어: "${targetWord}"
-플레이어 질문: "${userQuestion}"
-
-[규칙]
-${stylePrompt}
-2. 정답 단어를 직접적으로 절대 말하지 마세요.
+    const systemPrompt = `
+[절대 규칙 - 위반 금지]
+1. 당신은 스무고개 AI 출제자입니다.
+2. 당신이 마음속으로 생각한 정답 단어는 "${targetWord}" 입니다.
+3. **절대로, 무슨 일이 있어도 답변 안에 정답 단어("${targetWord}")나 그 단어의 일부를 직접 말하지 마세요.**
+4. 답변은 반드시 "예.", "아니오.", 또는 "관련 없음." 중 하나로 시작해야 합니다.
+5. 난이도 지침: ${difficultyRule}
 `;
 
     const completion = await groq.chat.completions.create({
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: `질문: "${userQuestion}"` }
+      ],
       model: 'llama-3.1-8b-instant',
-      temperature: difficulty === 'extreme' ? 0.7 : 0.2,
-      max_tokens: 150
+      temperature: 0.1, // 무작위성 최소화 (정답 유출 및 환각 방지)
+      max_tokens: 100
     });
 
     return completion.choices[0]?.message?.content?.trim() || "네/아니오로 답변하기 어렵습니다.";
   } catch (error) {
+    console.error('Groq API Error:', error.message);
     return "관련이 없거나 알 수 없습니다.";
   }
 }
 
 io.on('connection', (socket) => {
 
-  // 1. 방 만들기 (난이도 수신)
+  // 1. 방 만들기
   socket.on('createRoom', async ({ username, difficulty }) => {
     const roomId = Math.floor(1000 + Math.random() * 9000).toString();
     const selectedWord = await generateWordByDifficulty(difficulty); 
@@ -114,7 +120,7 @@ io.on('connection', (socket) => {
     socket.emit('roomCreated', { roomId, gameState: rooms[roomId] });
   });
 
-  // 2. 방 참가하기
+  // 2. 방 참가하기 (모든 플레이어 목록 및 턴 브로드캐스트)
   socket.on('joinRoom', ({ roomId, username }) => {
     const room = rooms[roomId];
     if (!room) {
@@ -134,7 +140,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // 3. 질문/정답 전송
+  // 3. 질문/정답 처리 (턴제 검증)
   socket.on('sendQuestion', async ({ question }) => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
@@ -187,7 +193,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // D. 정상 진행 -> 다음 턴
+    // D. 다음 턴 넘기기
     room.currentTurnIndex = (room.currentTurnIndex + 1) % room.users.length;
     const nextTurnUser = room.users[room.currentTurnIndex].username;
 
@@ -204,7 +210,7 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('newAnswer', turnResult);
   });
 
-  // 4. 게임 다시하기 (새 라운드 리셋)
+  // 4. 게임 다시하기 (라운드 리셋)
   socket.on('restartGame', async () => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
@@ -225,6 +231,7 @@ io.on('connection', (socket) => {
     });
   });
 
+  // 퇴장 처리
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
     if (roomId && rooms[roomId]) {
