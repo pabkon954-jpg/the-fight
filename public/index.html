@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스무스무 - AI 스무고개</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
     <div id="app">
-        <!-- 메인 로비 (방 생성 / 입장) -->
+        <!-- 메인 대기실 -->
         <div id="lobby" class="card">
             <h1>스무스무 🎲</h1>
             <p class="subtitle">AI와 함께하는 멀티플레이 스무고개</p>
@@ -16,6 +17,16 @@
             <div class="input-group">
                 <label for="username">닉네임</label>
                 <input type="text" id="username" placeholder="닉네임을 입력하세요" maxlength="10">
+            </div>
+
+            <div class="input-group">
+                <label for="difficulty">난이도 선택</label>
+                <select id="difficulty">
+                    <option value="easy">쉬움 (힌트 제공)</option>
+                    <option value="normal" selected>보통 (짧은 설명)</option>
+                    <option value="hard">어려움 (단답형)</option>
+                    <option value="extreme">극악 (알쏭달쏭)</option>
+                </select>
             </div>
 
             <button id="create-room-btn" class="btn primary">방 만들기</button>
@@ -37,24 +48,28 @@
                     <span>방 코드: <strong id="room-code-display">-</strong></span>
                     <span>참여 인원: <strong id="player-count">0</strong>명</span>
                 </div>
+                <div class="turn-info">
+                    현재 차례: <span id="current-turn-user" style="color:#007bff; font-weight:bold;">-</span>
+                </div>
                 <div class="question-counter">
                     남은 질문: <span id="questions-left">20</span>/20
                 </div>
             </div>
 
             <div id="chat-window" class="chat-window">
-                <div class="system-message">게임 방에 입장했습니다. 질문을 입력해보세요!</div>
+                <div class="system-message">게임 방에 입장했습니다. 질문이나 정답을 입력해보세요!</div>
             </div>
 
             <div class="input-area">
-                <input type="text" id="question-input" placeholder="질문이나 정답을 입력하세요..." disabled>
-                <button id="send-btn" class="btn primary" disabled>전송</button>
+                <input type="text" id="question-input" placeholder="질문이나 정답을 입력하세요...">
+                <button id="send-btn" class="btn primary">전송</button>
             </div>
+
+            <button id="restart-btn" class="btn secondary hidden" style="margin-top: 15px;">게임 다시하기</button>
         </div>
     </div>
 
-    <!-- Socket.io 라이브러리를 CDN으로 안정적으로 로드 -->
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="script.js?v=final2"></script>
+    <!-- 캐시 방지 버전을 v=perfect로 변경 -->
+    <script src="script.js?v=perfect"></script>
 </body>
 </html>
