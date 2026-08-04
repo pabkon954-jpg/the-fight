@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스무스무 - AI 스무고개</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=final_fix">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
     <div id="app">
-        <!-- 메인 대기실 -->
+        <!-- 1. 대기실 -->
         <div id="lobby" class="card">
             <h1>스무스무 🎲</h1>
             <p class="subtitle">AI와 함께하는 멀티플레이 스무고개</p>
@@ -41,7 +41,7 @@
             </div>
         </div>
 
-        <!-- 게임 진행 화면 -->
+        <!-- 2. 게임 진행 화면 -->
         <div id="game-room" class="card hidden">
             <div class="room-header">
                 <div class="room-info">
@@ -49,7 +49,7 @@
                     <span>참여 인원: <strong id="player-count">0</strong>명</span>
                 </div>
                 <div class="turn-info">
-                    현재 차례: <span id="current-turn-user" style="color:#007bff; font-weight:bold;">-</span>
+                    현재 차례: <span id="current-turn-user" style="color:#3b82f6; font-weight:bold;">-</span>
                 </div>
                 <div class="question-counter">
                     남은 질문: <span id="questions-left">20</span>/20
@@ -69,7 +69,6 @@
         </div>
     </div>
 
-    <!-- 캐시 방지 버전을 v=perfect로 변경 -->
     <script src="script.js?v=perfect"></script>
 </body>
 </html>

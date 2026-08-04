@@ -1,149 +1,202 @@
 * {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
 }
 
 body {
-  background-color: #121212;
-  color: #e0e0e0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  padding: 20px;
+    background-color: #121212;
+    color: #ffffff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
 }
 
-.container {
-  background-color: #1e1e1e;
-  width: 100%;
-  max-width: 500px;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  border: 1px solid #333;
+#app {
+    width: 100%;
+    max-width: 450px;
+}
+
+/* 핵심: 화면 숨김 처리 */
+.hidden {
+    display: none !important;
+}
+
+.card {
+    background-color: #1e1e1e;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    border: 1px solid #333;
 }
 
 h1 {
-  text-align: center;
-  font-size: 1.5rem;
-  margin-bottom: 20px;
-  color: #ffffff;
+    text-align: center;
+    font-size: 1.8rem;
+    margin-bottom: 8px;
 }
 
-h2 {
-  font-size: 1.2rem;
-  color: #4caf50;
+.subtitle {
+    text-align: center;
+    font-size: 0.9rem;
+    color: #aaa;
+    margin-bottom: 20px;
 }
 
-h3 {
-  font-size: 0.9rem;
-  color: #aaa;
-  margin-bottom: 8px;
+.input-group {
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
-/* 입력창 및 버튼 */
-.input-group, .input-section {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+.input-group label {
+    font-size: 0.85rem;
+    color: #ccc;
 }
 
-input[type="text"] {
-  flex: 1;
-  padding: 12px;
-  border-radius: 6px;
-  border: 1px solid #444;
-  background-color: #2a2a2a;
-  color: #fff;
-  font-size: 0.95rem;
-  outline: none;
+input[type="text"], select {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background-color: #2a2a2a;
+    color: #fff;
+    font-size: 1rem;
+    outline: none;
 }
 
-input[type="text"]:focus {
-  border-color: #4caf50;
+input[type="text"]:focus, select:focus {
+    border-color: #3b82f6;
 }
 
-button {
-  padding: 12px 16px;
-  border-radius: 6px;
-  border: none;
-  background-color: #4caf50;
-  color: white;
-  font-weight: bold;
-  cursor: pointer;
-  transition: background 0.2s;
-  white-space: nowrap;
+.btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
 }
 
-button:hover {
-  background-color: #45a049;
+.btn.primary {
+    background-color: #3b82f6;
+    color: white;
 }
 
-#create-room-btn {
-  width: 100%;
-  background-color: #2196f3;
+.btn.primary:hover {
+    background-color: #2563eb;
 }
 
-#create-room-btn:hover {
-  background-color: #1e88e5;
+.btn.secondary {
+    background-color: #10b981;
+    color: white;
 }
 
-/* 게임 헤더 */
-.game-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 12px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid #333;
+.btn.secondary:hover {
+    background-color: #059669;
 }
 
-/* 플레이어 목록 */
-.player-section {
-  margin-bottom: 16px;
+.divider {
+    text-align: center;
+    margin: 20px 0;
+    position: relative;
 }
 
-#player-list {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.divider::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background-color: #333;
+    z-index: 1;
 }
 
-#player-list li {
-  background-color: #333;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  color: #ddd;
+.divider span {
+    position: relative;
+    background-color: #1e1e1e;
+    padding: 0 10px;
+    color: #888;
+    font-size: 0.8rem;
+    z-index: 2;
 }
 
-/* 채팅 및 기록 영역 */
-.chat-section {
-  margin-bottom: 16px;
+.join-group {
+    display: flex;
+    gap: 8px;
 }
 
-#chat-history {
-  height: 280px !important;
-  background-color: #141414 !important;
-  border: 1px solid #333 !important;
-  border-radius: 8px;
-  padding: 12px !important;
-  overflow-y: auto;
-  font-size: 0.9rem;
-  line-height: 1.5;
+.join-group input {
+    flex: 1;
 }
 
-.chat-item {
-  padding: 8px;
-  background-color: #262626;
-  border-radius: 6px;
-  border-left: 3px solid #2196f3;
+.join-group .btn {
+    width: auto;
+    padding: 0 16px;
 }
 
-.chat-item span {
-  display: inline-block;
-  margin-top: 4px;
+/* 게임 진행 화면 스타일 */
+.room-header {
+    background-color: #2a2a2a;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.room-info {
+    display: flex;
+    justify-content: space-between;
+}
+
+.chat-window {
+    height: 320px;
+    overflow-y: auto;
+    background-color: #141414;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.system-message {
+    text-align: center;
+    color: #888;
+    font-size: 0.8rem;
+    margin: 8px 0;
+}
+
+.chat-message {
+    background-color: #222;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.input-area {
+    display: flex;
+    gap: 8px;
+}
+
+.input-area input {
+    flex: 1;
+}
+
+.input-area .btn {
+    width: auto;
+    padding: 0 16px;
 }
