@@ -19,7 +19,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const rooms = {};
 
-// 🎯 대폭 확장된 30개 세부 카테고리 목록
 const EXTENDED_CATEGORIES = [
   "음식/요리", "디저트/음료", "전자기기/가전", "동물/곤충", "해양생물",
   "식물/꽃/나무", "직업/전문가", "악기/음악용품", "운동/스포츠", "우주/천체",
@@ -29,15 +28,13 @@ const EXTENDED_CATEGORIES = [
   "캠핑/야외용품", "도서/학문분야", "무기/방어구", "도시/국가", "마법/판타지요소"
 ];
 
-// 📦 난이도별 세분화된 풍부한 백업 단어 풀 (실존 한국어 명사)
 const WORD_POOLS = {
   easy: ["사과", "바나나", "호랑이", "강아지", "고양이", "비행기", "컴퓨터", "스마트폰", "피자", "축구공", "냉장고", "자동차", "우산", "자전거", "피아노"],
   normal: ["전자레인지", "인공위성", "회전목마", "에펠탑", "선인장", "소방차", "도서관", "박물관", "나침반", "망원경", "잠수함", "타자기", "해바라기", "신문지"],
-  hard: ["주상절리", "측우기", "판소리", "해파리", "메트로놈", "피뢰침", "도굴꾼", "시계추", "모래시계", "굴삭기", "상형문자", "현악기", "망원경"],
+  hard: ["주상절리", "측우기", "판소리", "해파리", "메트로놈", "피뢰침", "도굴꾼", "시계추", "모래시계", "굴삭기", "상형문자", "현악기"],
   extreme: ["힉스보손", "초신성", "아포크린샘", "오로라", "테세우스의배", "판게아", "양자얽힘", "스트롬볼리", "슈뢰딩거의고양이", "이중슬릿"]
 };
 
-// 🤖 30개 카테고리 기반 고품질 단어 생성 함수
 async function generateWordByDifficulty(difficulty = 'normal') {
   try {
     const randomCategory = EXTENDED_CATEGORIES[Math.floor(Math.random() * EXTENDED_CATEGORIES.length)];
@@ -71,32 +68,32 @@ async function generateWordByDifficulty(difficulty = 'normal') {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// 🤖 정교하고 정확한 답변 생성을 위한 AI 로직 (보안 및 사실성 강화)
+// 🤖 AI 힌트 생성 프롬프트 수정 (과도한 힌트/유추 방지)
 async function askAI(targetWord, userQuestion, difficulty) {
   try {
     let difficultyInstruction = "";
 
     if (difficulty === 'easy') {
-      difficultyInstruction = "답변 첫 머리('예.', '아니오.', '관련 없음.') 뒤에, 정답을 유추하기 쉬운 객관적이고 친절한 힌트 문장을 하나 덧붙이세요.";
+      difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에, 아주 짧은 힌트 문장 하나만 덧붙이세요.";
     } else if (difficulty === 'hard') {
-      difficultyInstruction = "부연설명을 절대 붙이지 마시고, 오직 '예.', '아니오.', '관련 없음.' 세 가지 단답 중 하나만 출력하세요.";
+      difficultyInstruction = "부연설명을 절대 붙이지 말고, 오직 '예.', '아니오.', '관련 없음.' 단답으로만 출력하세요.";
     } else if (difficulty === 'extreme') {
-      difficultyInstruction = "'예.' 또는 '아니오.'로 정확히 판정하되, 플레이어에게 살짝 비유적이거나 깊이 생각해야 하는 알쏭달쏭한 힌트 한 문장을 덧붙이세요.";
+      difficultyInstruction = "'예.', '아니오.' 뒤에 알쏭달쏭한 비유적 힌트 한 문장만 짧게 덧붙이세요.";
     } else {
       // normal
-      difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에, 객관적인 사실에 입각한 아주 짧은 부연 설명(한 문장)을 덧붙이세요.";
+      difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에, 다른 비유나 쓸데없는 길고 구체적인 설명(사냥, 생태계, 비교군 언급 등) 없이 해당 질문의 사실 여부에 대한 10자 이내의 아주 절제된 짧은 부연 설명만 덧붙이세요.";
     }
 
     const systemPrompt = `
-[스무고개 AI 출제자 지침 - 엄격히 준수]
-1. 마음속으로 정한 정답 단어: "${targetWord}"
+[스무고개 AI 출제자 지침]
+1. 마음속 정답 단어: "${targetWord}"
 2. 질문자의 질문: "${userQuestion}"
 
 [규칙]
-- 정답 단어("${targetWord}")의 실제 사전적 정의와 상식에 기반하여 사실만을 정확하게 판단하세요.
 - 질문에 대한 판정은 반드시 "예.", "아니오.", "관련 없음." 중 하나로 시작해야 합니다.
-- **[절대 금지]** 답변 전체에 정답 단어인 "${targetWord}" 글자나 그 단어의 일부(음절)를 절대로 직접 언급하지 마세요.
-- 난이도별 지침: ${difficultyInstruction}
+- **[핵심 금지]** 질문과 직접 상관없는 다른 동물, 사물, 생태계, 상세 특징을 길게 늘어놓아서 정답을 쉽게 유추할 수 있는 힌트를 절대 주지 마세요.
+- **[절대 금지]** 정답 단어("${targetWord}")의 글자나 음절을 언급하지 마세요.
+- 난이도 지침: ${difficultyInstruction}
 `;
 
     const completion = await groq.chat.completions.create({
@@ -105,8 +102,8 @@ async function askAI(targetWord, userQuestion, difficulty) {
         { role: 'user', content: userQuestion }
       ],
       model: 'llama-3.1-8b-instant',
-      temperature: 0.1, // 무작위성을 줄여 정밀도 향상
-      max_tokens: 120
+      temperature: 0.1,
+      max_tokens: 80
     });
 
     return completion.choices[0]?.message?.content?.trim() || "네/아니오로 답변하기 어렵습니다.";
@@ -142,7 +139,7 @@ io.on('connection', (socket) => {
     socket.emit('roomCreated', { roomId, gameState: rooms[roomId] });
   });
 
-  // 2. 방 참가하기 (기존/신규 전체 플레이어 목록 동기화)
+  // 2. 방 참가하기
   socket.on('joinRoom', ({ roomId, username }) => {
     const room = rooms[roomId];
     if (!room) {
@@ -158,11 +155,12 @@ io.on('connection', (socket) => {
     socket.emit('roomJoined', { roomId, gameState: room });
     io.to(roomId).emit('updateGameState', { 
       users: room.users, 
+      difficulty: room.difficulty,
       currentTurnUser: room.users[room.currentTurnIndex]?.username 
     });
   });
 
-  // 3. 질문/정답 처리 (턴제 시스템 적용)
+  // 3. 질문/정답 처리
   socket.on('sendQuestion', async ({ question }) => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
@@ -180,7 +178,7 @@ io.on('connection', (socket) => {
 
     room.questionCount += 1;
 
-    // A. 정답 판정
+    // 정답 판정
     if (userQuestion === room.targetWord) {
       room.isGameOver = true;
       const resultData = {
@@ -196,10 +194,10 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // B. AI 답변 정교화 호출
+    // AI 답변
     const aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
 
-    // C. 20개 질문 한도 초과 게임 오버
+    // 20개 소진 게임 오버
     if (room.questionCount >= room.maxQuestions) {
       room.isGameOver = true;
       const resultData = {
@@ -215,7 +213,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // D. 정상 진행 -> 다음 순서 턴 넘기기
+    // 다음 차례 진행
     room.currentTurnIndex = (room.currentTurnIndex + 1) % room.users.length;
     const nextTurnUser = room.users[room.currentTurnIndex].username;
 
@@ -232,7 +230,7 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('newAnswer', turnResult);
   });
 
-  // 4. 게임 다시하기 (라운드 리셋)
+  // 4. 게임 다시하기
   socket.on('restartGame', async () => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
@@ -244,8 +242,6 @@ io.on('connection', (socket) => {
     room.isGameOver = false;
     room.history = [];
     room.currentTurnIndex = 0;
-
-    console.log(`[새 라운드] 방 코드: ${roomId} | 정답: ${newWord}`);
 
     io.to(roomId).emit('gameRestarted', {
       gameState: room,
@@ -264,6 +260,7 @@ io.on('connection', (socket) => {
         rooms[roomId].currentTurnIndex %= rooms[roomId].users.length;
         io.to(roomId).emit('updateGameState', { 
           users: rooms[roomId].users, 
+          difficulty: rooms[roomId].difficulty,
           currentTurnUser: rooms[roomId].users[rooms[roomId].currentTurnIndex]?.username 
         });
       }

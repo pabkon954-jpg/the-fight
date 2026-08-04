@@ -1,6 +1,5 @@
 const socket = io();
 
-// DOM 요소 가져오기
 const lobbyScreen = document.getElementById('lobby');
 const gameScreen = document.getElementById('game-room');
 
@@ -11,6 +10,7 @@ const roomCodeInput = document.getElementById('room-code-input');
 const joinRoomBtn = document.getElementById('join-room-btn');
 
 const roomCodeDisplay = document.getElementById('room-code-display');
+const difficultyDisplay = document.getElementById('difficulty-display');
 const playerCountDisplay = document.getElementById('player-count');
 const currentTurnDisplay = document.getElementById('current-turn-user');
 const questionsLeftDisplay = document.getElementById('questions-left');
@@ -19,7 +19,13 @@ const questionInput = document.getElementById('question-input');
 const sendBtn = document.getElementById('send-btn');
 const restartBtn = document.getElementById('restart-btn');
 
-// --- 이벤트 리스너 안전 등록 ---
+const DIFFICULTY_MAP = {
+    easy: '쉬움',
+    normal: '보통',
+    hard: '어려움',
+    extreme: '극악'
+};
+
 if (createRoomBtn) {
     createRoomBtn.addEventListener('click', () => {
         const username = usernameInput ? usernameInput.value.trim() : '';
@@ -61,7 +67,7 @@ if (restartBtn) {
     });
 }
 
-// --- Socket 소켓 이벤트 받기 ---
+// Socket 리스너
 
 socket.on('roomCreated', ({ roomId, gameState }) => {
     enterGameRoom(roomId, gameState);
@@ -75,8 +81,9 @@ socket.on('errorMessage', (msg) => {
     alert(msg);
 });
 
-socket.on('updateGameState', ({ users, currentTurnUser }) => {
+socket.on('updateGameState', ({ users, difficulty, currentTurnUser }) => {
     if (playerCountDisplay) playerCountDisplay.textContent = users.length;
+    if (difficultyDisplay && difficulty) difficultyDisplay.textContent = DIFFICULTY_MAP[difficulty] || difficulty;
     if (currentTurnDisplay && currentTurnUser) currentTurnDisplay.textContent = currentTurnUser;
 });
 
@@ -90,7 +97,7 @@ socket.on('newAnswer', (resultData) => {
         msgDiv.className = 'chat-message';
         msgDiv.innerHTML = `
             <p><strong>[질문 ${questionCount}] ${user}:</strong> ${question}</p>
-            <p class="ai-answer" style="color:#008000; margin-top:3px;"><strong>🤖 AI:</strong> ${answer}</p>
+            <p class="ai-answer" style="color:#10b981; margin-top:3px;"><strong>🤖 AI:</strong> ${answer}</p>
         `;
         chatWindow.appendChild(msgDiv);
         chatWindow.scrollTop = chatWindow.scrollHeight;
@@ -118,6 +125,9 @@ function enterGameRoom(roomId, gameState) {
     if (lobbyScreen) lobbyScreen.classList.add('hidden');
     if (gameScreen) gameScreen.classList.remove('hidden');
     if (roomCodeDisplay) roomCodeDisplay.textContent = roomId;
+    if (difficultyDisplay && gameState.difficulty) {
+        difficultyDisplay.textContent = DIFFICULTY_MAP[gameState.difficulty] || gameState.difficulty;
+    }
     if (playerCountDisplay) playerCountDisplay.textContent = gameState.users.length;
     
     if (currentTurnDisplay && gameState.users[gameState.currentTurnIndex]) {
