@@ -1,142 +1,146 @@
 const socket = io();
 
-const lobbyScreen = document.getElementById('lobby-screen');
-const gameScreen = document.getElementById('game-screen');
-const usernameInput = document.getElementById('username-input');
-const difficultySelect = document.getElementById('difficulty-select');
-const roomIdInput = document.getElementById('room-id-input');
+// DOM 요소 가져오기
+const lobbyScreen = document.getElementById('lobby');
+const gameScreen = document.getElementById('game-room');
+
+const usernameInput = document.getElementById('username');
+const difficultySelect = document.getElementById('difficulty');
 const createRoomBtn = document.getElementById('create-room-btn');
+const roomCodeInput = document.getElementById('room-code-input');
 const joinRoomBtn = document.getElementById('join-room-btn');
 
-const displayRoomId = document.getElementById('display-room-id');
-const playerList = document.getElementById('player-list');
-const chatHistory = document.getElementById('chat-history');
+const roomCodeDisplay = document.getElementById('room-code-display');
+const playerCountDisplay = document.getElementById('player-count');
+const currentTurnDisplay = document.getElementById('current-turn-user');
+const questionsLeftDisplay = document.getElementById('questions-left');
+const chatWindow = document.getElementById('chat-window');
 const questionInput = document.getElementById('question-input');
-const sendQuestionBtn = document.getElementById('send-question-btn');
-const questionCountText = document.getElementById('question-count');
+const sendBtn = document.getElementById('send-btn');
 const restartBtn = document.getElementById('restart-btn');
 
-let turnNotice = document.getElementById('turn-notice');
-if (!turnNotice) {
-  turnNotice = document.createElement('div');
-  turnNotice.id = 'turn-notice';
-  turnNotice.style.cssText = 'color: #ffca28; font-weight: bold; margin-bottom: 12px; font-size: 1rem; padding: 8px; background: #2a2a2a; border-radius: 6px; text-align: center;';
-  document.querySelector('.player-section').after(turnNotice);
-}
-
-// 1. 방 만들기
+// --- 1. 방 만들기 ---
 createRoomBtn.addEventListener('click', () => {
-  const username = usernameInput.value.trim();
-  const difficulty = difficultySelect.value;
-  if (!username) return alert('닉네임을 입력해주세요!');
-  socket.emit('createRoom', { username, difficulty });
-});
-
-// 2. 방 참가하기
-joinRoomBtn.addEventListener('click', () => {
-  const username = usernameInput.value.trim();
-  const roomId = roomIdInput.value.trim();
-  if (!username) return alert('닉네임을 입력해주세요!');
-  if (!roomId) return alert('방 번호를 입력해주세요!');
-  socket.emit('joinRoom', { roomId, username });
-});
-
-// 3. 질문 전송
-function handleSendQuestion() {
-  const question = questionInput.value.trim();
-  if (!question) return;
-  socket.emit('sendQuestion', { question });
-  questionInput.value = '';
-}
-
-sendQuestionBtn.addEventListener('click', handleSendQuestion);
-questionInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') handleSendQuestion();
-});
-
-// 4. 새 라운드 시작
-restartBtn.addEventListener('click', () => {
-  socket.emit('restartGame');
-});
-
-// Socket 이벤트 등록
-socket.on('roomCreated', ({ roomId, gameState }) => enterGame(roomId, gameState));
-socket.on('roomJoined', ({ roomId, gameState }) => enterGame(roomId, gameState));
-
-socket.on('updateGameState', ({ users, currentTurnUser }) => {
-  updatePlayerList(users);
-  updateTurnNotice(currentTurnUser);
-});
-
-socket.on('newAnswer', (data) => {
-  appendMessage(data);
-  if (questionCountText) {
-    questionCountText.textContent = `${data.questionCount} / 20`;
-  }
-  
-  if (data.isGameOver) {
-    turnNotice.textContent = "🎮 게임이 종료되었습니다!";
-    restartBtn.style.display = 'block';
-  } else if (data.currentTurnUser) {
-    updateTurnNotice(data.currentTurnUser);
-  }
-});
-
-socket.on('gameRestarted', ({ gameState, currentTurnUser }) => {
-  chatHistory.innerHTML = '';
-  questionCountText.textContent = '0 / 20';
-  restartBtn.style.display = 'none';
-  updateTurnNotice(currentTurnUser);
-  alert('새 라운드가 시작되었습니다!');
-});
-
-socket.on('errorMessage', (msg) => alert(msg));
-
-// 도우미 함수
-function enterGame(roomId, gameState) {
-  if (lobbyScreen) lobbyScreen.style.display = 'none';
-  if (gameScreen) gameScreen.style.display = 'block';
-  if (displayRoomId) displayRoomId.textContent = roomId;
-  
-  if (gameState) {
-    updatePlayerList(gameState.users || []);
-    const turnUser = gameState.users[gameState.currentTurnIndex]?.username;
-    updateTurnNotice(turnUser);
-
-    if (gameState.history) {
-      chatHistory.innerHTML = '';
-      gameState.history.forEach(item => appendMessage(item));
+    const username = usernameInput.value.trim();
+    if (!username) {
+        alert('닉네임을 입력해 주세요.');
+        return;
     }
-  }
+    const difficulty = difficultySelect.value;
+    socket.emit('createRoom', { username, difficulty });
+});
+
+// --- 2. 방 참가하기 ---
+joinRoomBtn.addEventListener('click', () => {
+    const username = usernameInput.value.trim();
+    const roomId = roomCodeInput.value.trim();
+
+    if (!username) {
+        alert('닉네임을 입력해 주세요.');
+        return;
+    }
+    if (!roomId) {
+        alert('방 코드를 입력해 주세요.');
+        return;
+    }
+
+    socket.emit('joinRoom', { roomId, username });
+});
+
+// --- 3. 질문 / 정답 전송 ---
+function sendQuestion() {
+    const question = questionInput.value.trim();
+    if (!question) return;
+
+    socket.emit('sendQuestion', { question });
+    questionInput.value = '';
 }
 
-function updateTurnNotice(turnUsername) {
-  if (turnNotice && turnUsername) {
-    turnNotice.textContent = `🎲 [ ${turnUsername} ] 님의 질문 차례입니다!`;
-  }
-}
+sendBtn.addEventListener('click', sendQuestion);
+questionInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendQuestion();
+});
 
-function updatePlayerList(users) {
-  if (!playerList) return;
-  playerList.innerHTML = '';
-  
-  const userArray = Array.isArray(users) ? users : [];
-  userArray.forEach(u => {
-    const li = document.createElement('li');
-    li.textContent = u.username || '익명';
-    playerList.appendChild(li);
-  });
-}
+// --- 4. 게임 다시하기 ---
+restartBtn.addEventListener('click', () => {
+    socket.emit('restartGame');
+});
 
-function appendMessage(data) {
-  if (!chatHistory) return;
-  const msgDiv = document.createElement('div');
-  msgDiv.className = 'chat-item';
-  msgDiv.style.marginBottom = '10px';
-  msgDiv.innerHTML = `
-    <strong>[질문 ${data.questionCount}] ${data.user}:</strong> ${data.question}<br>
-    <span style="color: #4CAF50; font-weight: bold;">└ AI: ${data.answer.replace(/\n/g, '<br>')}</span>
-  `;
-  chatHistory.appendChild(msgDiv);
-  chatHistory.scrollTop = chatHistory.scrollHeight;
+// --- Socket Event Listeners ---
+
+// 방 생성 성공
+socket.on('roomCreated', ({ roomId, gameState }) => {
+    enterGameRoom(roomId, gameState);
+});
+
+// 방 참가 성공
+socket.on('roomJoined', ({ roomId, gameState }) => {
+    enterGameRoom(roomId, gameState);
+});
+
+// 오류 메시지 처리
+socket.on('errorMessage', (msg) => {
+    alert(msg);
+});
+
+// 게임 상태 및 턴/참여자 업데이트
+socket.on('updateGameState', ({ users, currentTurnUser }) => {
+    playerCountDisplay.textContent = users.length;
+    if (currentTurnUser) {
+        currentTurnDisplay.textContent = currentTurnUser;
+    }
+});
+
+// 답변 받기 (채팅창 출력)
+socket.on('newAnswer', (resultData) => {
+    const { questionCount, user, question, answer, isGameOver, currentTurnUser } = resultData;
+
+    // 남은 질문 수 계산
+    questionsLeftDisplay.textContent = 20 - questionCount;
+
+    // 질문/답변 메시지 노출
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'chat-message';
+    msgDiv.innerHTML = `
+        <p><strong>[질문 ${questionCount}] ${user}:</strong> ${question}</p>
+        <p class="ai-answer"><strong>🤖 AI:</strong> ${answer}</p>
+    `;
+    chatWindow.appendChild(msgDiv);
+    chatWindow.scrollTop = chatWindow.scrollHeight;
+
+    // 턴 업데이트
+    if (currentTurnUser) {
+        currentTurnDisplay.textContent = currentTurnUser;
+    }
+
+    // 게임 오버 처리
+    if (isGameOver) {
+        questionInput.disabled = true;
+        sendBtn.disabled = true;
+        restartBtn.classList.remove('hidden');
+    }
+});
+
+// 게임 재시작 처리
+socket.on('gameRestarted', ({ gameState, currentTurnUser }) => {
+    chatWindow.innerHTML = '<div class="system-message">새로운 라운드가 시작되었습니다!</div>';
+    questionsLeftDisplay.textContent = 20;
+    questionInput.disabled = false;
+    sendBtn.disabled = false;
+    restartBtn.classList.add('hidden');
+    if (currentTurnUser) {
+        currentTurnDisplay.textContent = currentTurnUser;
+    }
+});
+
+// 대기실 -> 게임룸 화면 전환 함수
+function enterGameRoom(roomId, gameState) {
+    lobbyScreen.classList.add('hidden');
+    gameScreen.classList.remove('hidden');
+    roomCodeDisplay.textContent = roomId;
+    playerCountDisplay.textContent = gameState.users.length;
+    
+    if (gameState.users[gameState.currentTurnIndex]) {
+        currentTurnDisplay.textContent = gameState.users[gameState.currentTurnIndex].username;
+    }
 }
