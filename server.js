@@ -19,6 +19,13 @@ app.use(express.static(path.join(__dirname, 'public')));
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const rooms = {};
 
+// 🎯 극악 난이도 전용 커스텀 대사 목록 (이곳에 원하는 대사를 추가/수정하세요)
+const EXTREME_TAUNTS = [
+  "시발",
+  "병신",
+  "ㅈ같이 못하시네요"
+];
+
 const EXTENDED_CATEGORIES = [
   "음식/요리", "디저트/음료", "전자기기/가전", "동물/곤충", "해양생물",
   "식물/꽃/나무", "직업/전문가", "악기/음악용품", "운동/스포츠", "우주/천체",
@@ -68,7 +75,6 @@ async function generateWordByDifficulty(difficulty = 'normal') {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// 🤖 AI 힌트 생성 프롬프트 수정 (과도한 힌트/유추 방지)
 async function askAI(targetWord, userQuestion, difficulty) {
   try {
     let difficultyInstruction = "";
@@ -78,10 +84,10 @@ async function askAI(targetWord, userQuestion, difficulty) {
     } else if (difficulty === 'hard') {
       difficultyInstruction = "부연설명을 절대 붙이지 말고, 오직 '예.', '아니오.', '관련 없음.' 단답으로만 출력하세요.";
     } else if (difficulty === 'extreme') {
-      difficultyInstruction = "'예.', '아니오.' 뒤에 알쏭달쏭한 비유적 힌트 한 문장만 짧게 덧붙이세요.";
+      difficultyInstruction = "오직 '예.', '아니오.', '관련 없음.' 단답으로만 짧게 출력하세요.";
     } else {
       // normal
-      difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에, 다른 비유나 쓸데없는 길고 구체적인 설명(사냥, 생태계, 비교군 언급 등) 없이 해당 질문의 사실 여부에 대한 10자 이내의 아주 절제된 짧은 부연 설명만 덧붙이세요.";
+      difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에, 다른 비유나 쓸데없는 길고 구체적인 설명 없이 해당 질문의 사실 여부에 대한 10자 이내의 아주 절제된 짧은 부연 설명만 덧붙이세요.";
     }
 
     const systemPrompt = `
@@ -106,7 +112,7 @@ async function askAI(targetWord, userQuestion, difficulty) {
       max_tokens: 80
     });
 
-    return completion.choices[0]?.message?.content?.trim() || "네/아니오로 답변하기 어렵습니다.";
+    return completion.choices[0]?.message?.content?.trim() || "관련이 없거나 알 수 없습니다.";
   } catch (error) {
     console.error('Groq API Error:', error.message);
     return "관련이 없거나 알 수 없습니다.";
@@ -194,8 +200,15 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // AI 답변
-    const aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
+    // AI 기본 답변 가져오기
+    let aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
+
+    // 💥 난이도가 'extreme'(극악)일 경우, 커스텀 랜덤 대사 결합
+    if (room.difficulty === 'extreme' && EXTREME_TAUNTS.length > 0) {
+      const randomIndex = Math.floor(Math.random() * EXTREME_TAUNTS.length);
+      const randomTaunt = EXTREME_TAUNTS[randomIndex];
+      aiAnswer = `${randomTaunt} ${aiAnswer}`;
+    }
 
     // 20개 소진 게임 오버
     if (room.questionCount >= room.maxQuestions) {
