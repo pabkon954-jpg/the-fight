@@ -21,9 +21,9 @@ const rooms = {};
 
 // 🎯 극악 난이도 전용 커스텀 대사 목록 (이곳에 원하는 대사를 추가/수정하세요)
 const EXTREME_TAUNTS = [
-  "시발",
-  "병신",
-  "ㅈ같이 못하시네요"
+  "대사 1",
+  "대사 2",
+  "대사 3"
 ];
 
 const EXTENDED_CATEGORIES = [
@@ -203,11 +203,11 @@ io.on('connection', (socket) => {
     // AI 기본 답변 가져오기
     let aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
 
-    // 💥 난이도가 'extreme'(극악)일 경우, 커스텀 랜덤 대사 결합
+    // 💥 난이도가 'extreme'(극악)일 경우, 커스텀 랜덤 대사를 AI 답변 '뒤'에 결합
     if (room.difficulty === 'extreme' && EXTREME_TAUNTS.length > 0) {
       const randomIndex = Math.floor(Math.random() * EXTREME_TAUNTS.length);
       const randomTaunt = EXTREME_TAUNTS[randomIndex];
-      aiAnswer = `${randomTaunt} ${aiAnswer}`;
+      aiAnswer = `${aiAnswer} ${randomTaunt}`;
     }
 
     // 20개 소진 게임 오버
