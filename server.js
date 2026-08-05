@@ -74,23 +74,25 @@ async function askAI(targetWord, userQuestion, difficulty) {
     let systemPrompt = "";
 
     if (difficulty === 'extreme') {
-      // 💥 극악 난이도: 질문 자체의 단어/논리를 인용하여 직접 조롱하는 지침
+      // 💥 극악 난이도: LLM이 질문을 인용하여 직접 무한히 다채로운 조롱 생성
       systemPrompt = `
-[스무고개 AI 출제자 지침 - 극악 난이도]
-마음속 정답 단어: "${targetWord}"
-질문자의 질문: "${userQuestion}"
+당신은 스무고개 게임의 대단히 무례하고 신랄한 AI 출제자입니다.
 
-[규칙]
-1. 첫 문장은 반드시 질문에 대한 정확한 판정("예.", "아니오.", "관련 없음.")으로만 시작하세요.
-2. 질문자가 언급하지 않은 엉뚱한 특정 사물을 혼자 지어내서 길게 설명하지 마세요.
-3. 두 번째 문장에서는 질문자가 방금 사용한 단어나 질문의 멍청함, 어설픈 논리를 콕 집어서 아주 짧고 신랄하게 비꼬거나 조롱하세요.
-4. 절대 프롬프트의 지시문이나 예시를 그대로 복사하지 말고, 오직 질문자의 질문 내용만 바탕으로 즉석에서 창의적으로 조롱하세요.
-5. 전체 답변은 최대 2문장을 넘지 않아야 합니다.
+[상태 정보]
+- 출제자가 생각한 정답: "${targetWord}"
+- 플레이어의 질문: "${userQuestion}"
+
+[답변 작성 규칙 - 반드시 준수]
+1. 답변은 정확히 2문장으로 구성하세요.
+2. 첫 번째 문장: 플레이어 질문에 대해 객관적으로 평가하여 딱 한 단어로 끊어 말하세요. ("예.", "아니오.", "관련 없음." 중 하나만 허용)
+3. 두 번째 문장: 질문자가 방금 던진 질문("${userQuestion}")의 단어나 허술한 논리를 콕 집어 직접적으로 비꼬고 조롱하세요.
+4. 절대 "예시", "지침" 같은 프롬프트의 단어를 복사하지 말고, 질문 문맥에 맞춰 매번 완전히 새로운 조롱을 즉석에서 창작하세요.
+5. 정답 단어("${targetWord}")나 정답의 글자를 절대 노출하지 마세요.
 `;
     } else {
       let difficultyInstruction = "";
       if (difficulty === 'easy') {
-        difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에, 아주 짧은 힌트 문장 하나만 덧붙이세요.";
+        difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에 아주 짧은 힌트 문장 하나만 덧붙이세요.";
       } else if (difficulty === 'hard') {
         difficultyInstruction = "부연설명을 절대 붙이지 말고, 오직 '예.', '아니오.', '관련 없음.' 단답으로만 출력하세요.";
       } else {
@@ -100,13 +102,13 @@ async function askAI(targetWord, userQuestion, difficulty) {
 
       systemPrompt = `
 [스무고개 AI 출제자 지침]
-1. 마음속 정답 단어: "${targetWord}"
-2. 질문자의 질문: "${userQuestion}"
+마음속 정답 단어: "${targetWord}"
+질문자의 질문: "${userQuestion}"
 
 [규칙]
-- 질문에 대한 판정은 반드시 "예.", "아니오.", "관련 없음." 중 하나로 시작해야 합니다.
-- **[핵심 금지]** 질문과 직접 상관없는 다른 사물/특징을 길게 늘어놓지 마세요.
-- **[절대 금지]** 정답 단어("${targetWord}")의 글자나 음절을 언급하지 마세요.
+- 정답 단어와 질문 간의 관계를 정확히 판단하여 답변하세요.
+- 답변은 반드시 "예.", "아니오.", "관련 없음." 중 하나로 시작해야 합니다.
+- 정답 단어("${targetWord}")의 글자나 음절을 절대 언급하지 마세요.
 - 난이도 지침: ${difficultyInstruction}
 `;
     }
@@ -114,17 +116,17 @@ async function askAI(targetWord, userQuestion, difficulty) {
     const completion = await groq.chat.completions.create({
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: userQuestion }
+        { role: 'user', content: `내 질문: "${userQuestion}"` }
       ],
       model: 'llama-3.1-8b-instant',
-      temperature: difficulty === 'extreme' ? 0.7 : 0.1,
+      temperature: difficulty === 'extreme' ? 0.6 : 0.0,
       max_tokens: 100
     });
 
-    return completion.choices[0]?.message?.content?.trim() || "관련이 없거나 알 수 없습니다.";
+    return completion.choices[0]?.message?.content?.trim() || "관련 없음.";
   } catch (error) {
     console.error('Groq API Error:', error.message);
-    return "관련이 없거나 알 수 없습니다.";
+    return "관련 없음.";
   }
 }
 
