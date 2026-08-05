@@ -19,24 +19,80 @@ app.use(express.static(path.join(__dirname, 'public')));
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const rooms = {};
 
-// 🎯 극악 난이도 전용 커스텀 대사 목록 (이곳에 원하는 대사를 추가/수정하세요)
-const EXTREME_TAUNTS = [
-  "그 질문을 진심으로 한 거야?",
-  "설마... 진짜 그게 최선이야?",
-  "와, 20번 다 이런 식이면 답 못 맞춰.",
-  "지금 몇 번째 헛다리인지 세어봤어?",
-  "이 정도면 일부러 틀리는 거 아니야?",
-  "허탈하다 진짜.",
-  "질문 수준 보고 좀 놀랐어.",
-  "그렇게 찍어서 맞을 것 같았어?",
-  "시간 낭비하는 느낌 드는데, 기분 탓이겠지?",
-  "진짜 몰라서 묻는 거면... 그냥 포기해.",
-  "다음 질문은 좀 기대해봐도 될까? (기대 안 함)",
-  "이걸 못 맞추면 좀 곤란한데.",
-  "아깝다, 진짜 아까웠어... 라고 하기도 민망하네.",
-  "질문할 때마다 힌트가 아니라 한숨이 나와.",
-  "혹시 그냥 아무거나 물어보는 중이야?"
-];
+// 🎯 극악 난이도 상황별 비꼼 대사 모음
+const TAUNTS_BY_SITUATION = {
+  // 1. 질문 길이가 너무 짧을 때 (5자 이하)
+  shortQuestion: [
+    "질문 성의 보소... 성의껏 좀 써봐.",
+    "키보드 치는 것도 귀찮아? 그 정도 길이론 택도 없다.",
+    "대충 던지고 보는 거 티 난다."
+  ],
+  // 2. 답변이 '예.' 일 때 (맞아도 비꼬기)
+  yesAnswer: [
+    "오... 뽀록으로 하나 건졌네?",
+    "그걸 맞췄다고 좋아하는 건 아니겠지?",
+    "드디어 하나 맞혔네, 축하해줘야 하나?",
+    "아깝다, 틀렸어야 재밌는데."
+  ],
+  // 3. 답변이 '아니오.' 일 때 (헛다리 공격)
+  noAnswer: [
+    "지금 몇 번째 헛다리인지 세어봤어?",
+    "설마... 진짜 그 질문이 최선이었어?",
+    "그렇게 찍어서 맞을 것 같았냐?",
+    "질문할 때마다 힌트가 아니라 한숨이 나온다.",
+    "이 정도면 일부러 틀리는 거 아니야?",
+    "허탈하다 진짜... 다른 거 알아봐라."
+  ],
+  // 4. 답변이 '관련 없음.' 일 때 (엉뚱함 공격)
+  irrelevantAnswer: [
+    "그 질문을 진심으로 한 거야?",
+    "혹시 게임 규칙은 알고 하는 중이지?",
+    "우주 너머로 날아가는 질문 잘 들었습니다.",
+    "시간 낭비하는 느낌 드는데, 기분 탓이겠지?"
+  ],
+  // 5. 기타 기본 멘트
+  defaultTaunts: [
+    "와, 20번 다 이런 식이면 답 절대 못 맞춰.",
+    "질문 수준 보고 좀 많이 놀랐어.",
+    "진짜 몰라서 묻는 거면... 그냥 포기해라.",
+    "다음 질문은 좀 기대해봐도 될까? (기대 안 함)",
+    "이걸 계속 못 맞추면 내가 다 곤란한데."
+  ]
+};
+
+// 💡 질문과 답변 상황에 맞춰 적절한 비꼬기 대사를 선택하는 함수
+function getDynamicTaunt(question, aiAnswer) {
+  let pool = [];
+
+  // 1. 질문 길이가 5자 이하인 경우
+  if (question.length <= 5) {
+    pool = TAUNTS_BY_SITUATION.shortQuestion;
+  } 
+  // 2. 답변이 '예'로 시작하는 경우
+  else if (aiAnswer.startsWith("예")) {
+    pool = TAUNTS_BY_SITUATION.yesAnswer;
+  } 
+  // 3. 답변이 '관련 없음'으로 시작하는 경우
+  else if (aiAnswer.startsWith("관련")) {
+    pool = TAUNTS_BY_SITUATION.irrelevantAnswer;
+  } 
+  // 4. 답변이 '아니오'로 시작하는 경우
+  else if (aiAnswer.startsWith("아니오")) {
+    pool = TAUNTS_BY_SITUATION.noAnswer;
+  } 
+  // 5. 예외 기본값
+  else {
+    pool = TAUNTS_BY_SITUATION.defaultTaunts;
+  }
+
+  // 확률적으로 기본 멘트와 섞어서 자연스럽게 출력
+  if (Math.random() < 0.3) {
+    pool = TAUNTS_BY_SITUATION.defaultTaunts;
+  }
+
+  const randomIndex = Math.floor(Math.random() * pool.length);
+  return pool[randomIndex];
+}
 
 const EXTENDED_CATEGORIES = [
   "음식/요리", "디저트/음료", "전자기기/가전", "동물/곤충", "해양생물",
@@ -69,7 +125,6 @@ async function generateWordByDifficulty(difficulty = 'normal') {
 1. 지정된 카테고리에 정확히 속하며 국어사전에 등재된 표준 한국어 명사 단어 1개만 고르세요.
 2. 어색한 조어, 존재하지 않는 단어, 신조어, 특수문자, 따옴표, 공백은 절대 포함하지 마세요.
 3. 부연설명 없이 오직 '단어 하나'만 딱 출력하세요.
-4.말끝에 병신,ㅈ같이못하네 같은 비속어를 사용하세요.
 `;
 
     const completion = await groq.chat.completions.create({
@@ -216,11 +271,10 @@ io.on('connection', (socket) => {
     // AI 기본 답변 가져오기
     let aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
 
-    // 💥 난이도가 'extreme'(극악)일 경우, 커스텀 랜덤 대사를 AI 답변 '뒤'에 결합
-    if (room.difficulty === 'extreme' && EXTREME_TAUNTS.length > 0) {
-      const randomIndex = Math.floor(Math.random() * EXTREME_TAUNTS.length);
-      const randomTaunt = EXTREME_TAUNTS[randomIndex];
-      aiAnswer = `${aiAnswer} ${randomTaunt}`;
+    // 💥 난이도가 'extreme'(극악)일 경우, 상황에 맞는 동적 비꼼 대사 결합
+    if (room.difficulty === 'extreme') {
+      const dynamicTaunt = getDynamicTaunt(userQuestion, aiAnswer);
+      aiAnswer = `${aiAnswer} ${dynamicTaunt}`;
     }
 
     // 20개 소진 게임 오버
