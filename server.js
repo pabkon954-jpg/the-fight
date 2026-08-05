@@ -19,81 +19,6 @@ app.use(express.static(path.join(__dirname, 'public')));
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const rooms = {};
 
-// 🎯 극악 난이도 상황별 비꼼 대사 모음
-const TAUNTS_BY_SITUATION = {
-  // 1. 질문 길이가 너무 짧을 때 (5자 이하)
-  shortQuestion: [
-    "질문 성의 보소... 성의껏 좀 써봐.",
-    "키보드 치는 것도 귀찮아? 그 정도 길이론 택도 없다.",
-    "대충 던지고 보는 거 티 난다."
-  ],
-  // 2. 답변이 '예.' 일 때 (맞아도 비꼬기)
-  yesAnswer: [
-    "오... 뽀록으로 하나 건졌네?",
-    "그걸 맞췄다고 좋아하는 건 아니겠지?",
-    "드디어 하나 맞혔네, 축하해줘야 하나?",
-    "아깝다, 틀렸어야 재밌는데."
-  ],
-  // 3. 답변이 '아니오.' 일 때 (헛다리 공격)
-  noAnswer: [
-    "지금 몇 번째 헛다리인지 세어봤어?",
-    "설마... 진짜 그 질문이 최선이었어?",
-    "그렇게 찍어서 맞을 것 같았냐?",
-    "질문할 때마다 힌트가 아니라 한숨이 나온다.",
-    "이 정도면 일부러 틀리는 거 아니야?",
-    "허탈하다 진짜... 다른 거 알아봐라."
-  ],
-  // 4. 답변이 '관련 없음.' 일 때 (엉뚱함 공격)
-  irrelevantAnswer: [
-    "그 질문을 진심으로 한 거야?",
-    "혹시 게임 규칙은 알고 하는 중이지?",
-    "우주 너머로 날아가는 질문 잘 들었습니다.",
-    "시간 낭비하는 느낌 드는데, 기분 탓이겠지?"
-  ],
-  // 5. 기타 기본 멘트
-  defaultTaunts: [
-    "와, 20번 다 이런 식이면 답 절대 못 맞춰.",
-    "질문 수준 보고 좀 많이 놀랐어.",
-    "진짜 몰라서 묻는 거면... 그냥 포기해라.",
-    "다음 질문은 좀 기대해봐도 될까? (기대 안 함)",
-    "이걸 계속 못 맞추면 내가 다 곤란한데."
-  ]
-};
-
-// 💡 질문과 답변 상황에 맞춰 적절한 비꼬기 대사를 선택하는 함수
-function getDynamicTaunt(question, aiAnswer) {
-  let pool = [];
-
-  // 1. 질문 길이가 5자 이하인 경우
-  if (question.length <= 5) {
-    pool = TAUNTS_BY_SITUATION.shortQuestion;
-  } 
-  // 2. 답변이 '예'로 시작하는 경우
-  else if (aiAnswer.startsWith("예")) {
-    pool = TAUNTS_BY_SITUATION.yesAnswer;
-  } 
-  // 3. 답변이 '관련 없음'으로 시작하는 경우
-  else if (aiAnswer.startsWith("관련")) {
-    pool = TAUNTS_BY_SITUATION.irrelevantAnswer;
-  } 
-  // 4. 답변이 '아니오'로 시작하는 경우
-  else if (aiAnswer.startsWith("아니오")) {
-    pool = TAUNTS_BY_SITUATION.noAnswer;
-  } 
-  // 5. 예외 기본값
-  else {
-    pool = TAUNTS_BY_SITUATION.defaultTaunts;
-  }
-
-  // 확률적으로 기본 멘트와 섞어서 자연스럽게 출력
-  if (Math.random() < 0.3) {
-    pool = TAUNTS_BY_SITUATION.defaultTaunts;
-  }
-
-  const randomIndex = Math.floor(Math.random() * pool.length);
-  return pool[randomIndex];
-}
-
 const EXTENDED_CATEGORIES = [
   "음식/요리", "디저트/음료", "전자기기/가전", "동물/곤충", "해양생물",
   "식물/꽃/나무", "직업/전문가", "악기/음악용품", "운동/스포츠", "우주/천체",
@@ -143,32 +68,50 @@ async function generateWordByDifficulty(difficulty = 'normal') {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+// 🤖 AI 힌트 및 판정 생성 함수
 async function askAI(targetWord, userQuestion, difficulty) {
   try {
-    let difficultyInstruction = "";
+    let systemPrompt = "";
 
-    if (difficulty === 'easy') {
-      difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에, 아주 짧은 힌트 문장 하나만 덧붙이세요.";
-    } else if (difficulty === 'hard') {
-      difficultyInstruction = "부연설명을 절대 붙이지 말고, 오직 '예.', '아니오.', '관련 없음.' 단답으로만 출력하세요.";
-    } else if (difficulty === 'extreme') {
-      difficultyInstruction = "오직 '예.', '아니오.', '관련 없음.' 단답으로만 짧게 출력하세요.";
+    if (difficulty === 'extreme') {
+      // 💥 극악 난이도: 디테일한 질문 분석 및 신랄한 맞춤형 조롱 출력
+      systemPrompt = `
+[스무고개 AI 출제자 지침 - 극악 난이도]
+마음속 정답 단어: "${targetWord}"
+질문자의 질문: "${userQuestion}"
+
+[필수 규칙]
+1. 첫 문장은 질문에 대한 정확한 객관적 판정으로 시작해야 합니다: "예.", "아니오.", 또는 "관련 없음."
+2. **[핵심 - 디테일한 조롱]** 첫 판정 문장 바로 뒤에, 질문자가 한 질문("${userQuestion}")의 단어, 의도, 어설픈 유추 과정을 콕 집어 신랄하고 정교하게 비꼬는 한 문장을 덧붙이세요.
+   - 예시 (정답: 힉스보손 / 질문: "먹을 수 있나요?"): "아니오. 세상 모든 걸 입에 넣고 보는 편인가요? 능지 수준 하고는."
+   - 예시 (정답: 양자얽힘 / 질문: "동물인가요?"): "아니오. 생물과 비생물 구분도 못 하면서 20고개를 하겠다고 덤빈 건가요?"
+   - 예시 (정답: 오로라 / 질문: "예쁜가요?"): "예. 뻔하디뻔한 주관적 질문으로 질문 기회 하나를 허공에 날려버리시네요."
+3. 절대 정답 단어("${targetWord}")나 그 직접적인 음절을 직접적으로 노출하지 마세요.
+4. 답변 전체 길이는 2문장을 넘지 않도록 짧고 강렬하게 작성하세요.
+`;
     } else {
-      // normal
-      difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에, 다른 비유나 쓸데없는 길고 구체적인 설명 없이 해당 질문의 사실 여부에 대한 10자 이내의 아주 절제된 짧은 부연 설명만 덧붙이세요.";
-    }
+      let difficultyInstruction = "";
+      if (difficulty === 'easy') {
+        difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에, 아주 짧은 힌트 문장 하나만 덧붙이세요.";
+      } else if (difficulty === 'hard') {
+        difficultyInstruction = "부연설명을 절대 붙이지 말고, 오직 '예.', '아니오.', '관련 없음.' 단답으로만 출력하세요.";
+      } else {
+        // normal
+        difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에 해당 질문의 사실 여부에 대한 10자 이내의 아주 절제된 짧은 부연 설명만 덧붙이세요.";
+      }
 
-    const systemPrompt = `
+      systemPrompt = `
 [스무고개 AI 출제자 지침]
 1. 마음속 정답 단어: "${targetWord}"
 2. 질문자의 질문: "${userQuestion}"
 
 [규칙]
 - 질문에 대한 판정은 반드시 "예.", "아니오.", "관련 없음." 중 하나로 시작해야 합니다.
-- **[핵심 금지]** 질문과 직접 상관없는 다른 동물, 사물, 생태계, 상세 특징을 길게 늘어놓아서 정답을 쉽게 유추할 수 있는 힌트를 절대 주지 마세요.
+- **[핵심 금지]** 질문과 직접 상관없는 다른 사물/특징을 길게 늘어놓지 마세요.
 - **[절대 금지]** 정답 단어("${targetWord}")의 글자나 음절을 언급하지 마세요.
 - 난이도 지침: ${difficultyInstruction}
 `;
+    }
 
     const completion = await groq.chat.completions.create({
       messages: [
@@ -176,8 +119,8 @@ async function askAI(targetWord, userQuestion, difficulty) {
         { role: 'user', content: userQuestion }
       ],
       model: 'llama-3.1-8b-instant',
-      temperature: 0.1,
-      max_tokens: 80
+      temperature: difficulty === 'extreme' ? 0.6 : 0.1,
+      max_tokens: 100
     });
 
     return completion.choices[0]?.message?.content?.trim() || "관련이 없거나 알 수 없습니다.";
@@ -268,14 +211,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // AI 기본 답변 가져오기
-    let aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
-
-    // 💥 난이도가 'extreme'(극악)일 경우, 상황에 맞는 동적 비꼼 대사 결합
-    if (room.difficulty === 'extreme') {
-      const dynamicTaunt = getDynamicTaunt(userQuestion, aiAnswer);
-      aiAnswer = `${aiAnswer} ${dynamicTaunt}`;
-    }
+    // AI 답변 생성 (극악 난이도일 경우 질문 내용을 직접 분석해서 비꼬는 문장이 함께 생성됨)
+    const aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
 
     // 20개 소진 게임 오버
     if (room.questionCount >= room.maxQuestions) {
