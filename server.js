@@ -74,20 +74,18 @@ async function askAI(targetWord, userQuestion, difficulty) {
     let systemPrompt = "";
 
     if (difficulty === 'extreme') {
-      // 💥 극악 난이도: 디테일한 질문 분석 및 신랄한 맞춤형 조롱 출력
+      // 💥 극악 난이도: 질문 자체의 단어/논리를 인용하여 직접 조롱하는 지침
       systemPrompt = `
 [스무고개 AI 출제자 지침 - 극악 난이도]
 마음속 정답 단어: "${targetWord}"
 질문자의 질문: "${userQuestion}"
 
-[필수 규칙]
-1. 첫 문장은 질문에 대한 정확한 객관적 판정으로 시작해야 합니다: "예.", "아니오.", 또는 "관련 없음."
-2. **[핵심 - 디테일한 조롱]** 첫 판정 문장 바로 뒤에, 질문자가 한 질문("${userQuestion}")의 단어, 의도, 어설픈 유추 과정을 콕 집어 신랄하고 정교하게 비꼬는 한 문장을 덧붙이세요.
-   - 예시 (정답: 힉스보손 / 질문: "먹을 수 있나요?"): "아니오. 세상 모든 걸 입에 넣고 보는 편인가요? 능지 수준 하고는."
-   - 예시 (정답: 양자얽힘 / 질문: "동물인가요?"): "아니오. 생물과 비생물 구분도 못 하면서 20고개를 하겠다고 덤빈 건가요?"
-   - 예시 (정답: 오로라 / 질문: "예쁜가요?"): "예. 뻔하디뻔한 주관적 질문으로 질문 기회 하나를 허공에 날려버리시네요."
-3. 절대 정답 단어("${targetWord}")나 그 직접적인 음절을 직접적으로 노출하지 마세요.
-4. 답변 전체 길이는 2문장을 넘지 않도록 짧고 강렬하게 작성하세요.
+[규칙]
+1. 첫 문장은 반드시 질문에 대한 정확한 판정("예.", "아니오.", "관련 없음.")으로만 시작하세요.
+2. 질문자가 언급하지 않은 엉뚱한 특정 사물을 혼자 지어내서 길게 설명하지 마세요.
+3. 두 번째 문장에서는 질문자가 방금 사용한 단어나 질문의 멍청함, 어설픈 논리를 콕 집어서 아주 짧고 신랄하게 비꼬거나 조롱하세요.
+4. 절대 프롬프트의 지시문이나 예시를 그대로 복사하지 말고, 오직 질문자의 질문 내용만 바탕으로 즉석에서 창의적으로 조롱하세요.
+5. 전체 답변은 최대 2문장을 넘지 않아야 합니다.
 `;
     } else {
       let difficultyInstruction = "";
@@ -119,7 +117,7 @@ async function askAI(targetWord, userQuestion, difficulty) {
         { role: 'user', content: userQuestion }
       ],
       model: 'llama-3.1-8b-instant',
-      temperature: difficulty === 'extreme' ? 0.6 : 0.1,
+      temperature: difficulty === 'extreme' ? 0.7 : 0.1,
       max_tokens: 100
     });
 
@@ -211,7 +209,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // AI 답변 생성 (극악 난이도일 경우 질문 내용을 직접 분석해서 비꼬는 문장이 함께 생성됨)
+    // AI 답변 생성
     const aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
 
     // 20개 소진 게임 오버
