@@ -68,65 +68,68 @@ async function generateWordByDifficulty(difficulty = 'normal') {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// 🤖 AI 힌트 및 판정 생성 함수
+// 🤖 AI 힌트 및 판정 생성 함수 (2단계 분리 처리)
 async function askAI(targetWord, userQuestion, difficulty) {
   try {
-    let systemPrompt = "";
+    // [1단계] 정답 판정만 엄격하게 처리 (temperature: 0.0)
+    const judgePrompt = `
+당신은 스무고개 게임의 객관적인 판정관입니다.
+마음속 정답: "${targetWord}"
+플레이어 질문: "${userQuestion}"
 
-    if (difficulty === 'extreme') {
-      // 💥 극악 난이도: LLM이 질문을 인용하여 직접 무한히 다채로운 조롱 생성
-      systemPrompt = `
-당신은 스무고개 게임의 대단히 무례하고 신랄한 AI 출제자입니다.
-
-[상태 정보]
-- 출제자가 생각한 정답: "${targetWord}"
-- 플레이어의 질문: "${userQuestion}"
-
-[답변 작성 규칙 - 반드시 준수]
-1. 답변은 정확히 2문장으로 구성하세요.
-2. 첫 번째 문장: 플레이어 질문에 대해 객관적으로 평가하여 딱 한 단어로 끊어 말하세요. ("예.", "아니오.", "관련 없음." 중 하나만 허용)
-3. 두 번째 문장: 질문자가 방금 던진 질문("${userQuestion}")의 단어나 허술한 논리를 콕 집어 직접적으로 비꼬고 조롱하세요.
-4. 절대 "예시", "지침" 같은 프롬프트의 단어를 복사하지 말고, 질문 문맥에 맞춰 매번 완전히 새로운 조롱을 즉석에서 창작하세요.
-5. 정답 단어("${targetWord}")나 정답의 글자를 절대 노출하지 마세요.
+위 질문이 정답 단어에 부합하는지 엄격하게 판단하여 오직 "예.", "아니오.", "관련 없음." 중 하나의 단어로만 답변하세요. 다른 부연설명은 절대로 붙이지 마세요.
 `;
-    } else {
-      let difficultyInstruction = "";
-      if (difficulty === 'easy') {
-        difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에 아주 짧은 힌트 문장 하나만 덧붙이세요.";
-      } else if (difficulty === 'hard') {
-        difficultyInstruction = "부연설명을 절대 붙이지 말고, 오직 '예.', '아니오.', '관련 없음.' 단답으로만 출력하세요.";
-      } else {
-        // normal
-        difficultyInstruction = "'예.', '아니오.', '관련 없음.' 뒤에 해당 질문의 사실 여부에 대한 10자 이내의 아주 절제된 짧은 부연 설명만 덧붙이세요.";
-      }
 
-      systemPrompt = `
-[스무고개 AI 출제자 지침]
-마음속 정답 단어: "${targetWord}"
-질문자의 질문: "${userQuestion}"
-
-[규칙]
-- 정답 단어와 질문 간의 관계를 정확히 판단하여 답변하세요.
-- 답변은 반드시 "예.", "아니오.", "관련 없음." 중 하나로 시작해야 합니다.
-- 정답 단어("${targetWord}")의 글자나 음절을 절대 언급하지 마세요.
-- 난이도 지침: ${difficultyInstruction}
-`;
-    }
-
-    const completion = await groq.chat.completions.create({
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: `내 질문: "${userQuestion}"` }
-      ],
+    const judgeCompletion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: judgePrompt }],
       model: 'llama-3.1-8b-instant',
-      temperature: difficulty === 'extreme' ? 0.6 : 0.0,
-      max_tokens: 100
+      temperature: 0.0,
+      max_tokens: 10
     });
 
-    return completion.choices[0]?.message?.content?.trim() || "관련 없음.";
+    let rawJudgement = judgeCompletion.choices[0]?.message?.content?.trim() || "관련 없음.";
+    let judgement = "관련 없음.";
+    if (rawJudgement.includes("예")) judgement = "예.";
+    else if (rawJudgement.includes("아니오")) judgement = "아니오.";
+
+    // extreme 난이도가 아니면 단순 판정 결과 및 간단 설명 반환
+    if (difficulty !== 'extreme') {
+      if (difficulty === 'hard') return judgement;
+      return `${judgement} (정답과 관련하여 판단된 결과입니다.)`;
+    }
+
+    // [2단계] 판정 결과를 바탕으로 질문의 키워드/논리를 꼬투리 잡아 조롱 생성 (temperature: 0.7)
+    // 💥 환각을 차단하기 위해 이 단계 프롬프트에는 정답 단어(targetWord)를 전달하지 않습니다.
+    const tauntPrompt = `
+당신은 스무고개 게임 플레이어를 신랄하게 비꼬는 악질 AI 출제자입니다.
+
+플레이어의 질문: "${userQuestion}"
+질문에 대한 판정 결과: "${judgement}"
+
+[지침]
+1. 플레이어 질문("${userQuestion}")에 사용된 단어나 허술한 논리를 콕 집어 직접적으로 짧고 신랄하게 비꼬는 문장 1개만 작성하세요.
+2. 절대 예시나 지침 단어를 그대로 복사하지 말고, 오직 질문 맥락에 맞는 창의적인 조롱 1문장만 딱 출력하세요.
+3. 반말과 매서운 억양을 사용하세요.
+
+[출력 예시 참고]
+질문: "사람 때리면 아픈가요?" -> 당연한 걸 물어보는 걸 보니 네 지능 수준이 유추되는구나.
+질문: "다이소에서 파나요?" -> 다이소 마니아냐? 질문 수준이 딱 다이소 천원짜리 수준이다.
+`;
+
+    const tauntCompletion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: tauntPrompt }],
+      model: 'llama-3.1-8b-instant',
+      temperature: 0.7,
+      max_tokens: 60
+    });
+
+    const taunt = tauntCompletion.choices[0]?.message?.content?.trim() || "질문 수준 하고는.";
+
+    return `${judgement} ${taunt}`;
+
   } catch (error) {
     console.error('Groq API Error:', error.message);
-    return "관련 없음.";
+    return "관련 없음. 제대로 된 질문이나 해라.";
   }
 }
 
