@@ -28,11 +28,22 @@ const EXTENDED_CATEGORIES = [
   "캠핑/야외용품", "도서/학문분야", "무기/방어구", "도시/국가", "마법/판타지요소"
 ];
 
+// ─────────────────────────────────────────────
+// ✅ 개선 1: 극악난이도(extreme)를 "전문용어"가 아니라
+//    "다들 들어는 봤지만 막상 맞히려면 헷갈리는 단어"로 교체
+// ─────────────────────────────────────────────
 const WORD_POOLS = {
   easy: ["사과", "바나나", "호랑이", "강아지", "고양이", "비행기", "컴퓨터", "스마트폰", "피자", "축구공", "냉장고", "자동차", "우산", "자전거", "피아노"],
   normal: ["전자레인지", "인공위성", "회전목마", "에펠탑", "선인장", "소방차", "도서관", "박물관", "나침반", "망원경", "잠수함", "타자기", "해바라기", "신문지"],
   hard: ["주상절리", "측우기", "판소리", "해파리", "메트로놈", "피뢰침", "도굴꾼", "시계추", "모래시계", "굴삭기", "상형문자", "현악기"],
-  extreme: ["힉스보손", "초신성", "아포크린샘", "오로라", "테세우스의배", "판게아", "양자얽힘", "스트롬볼리", "슈뢰딩거의고양이", "이중슬릿"]
+  extreme: [
+    "도플갱어", "데자뷰", "세렌디피티", "노스탤지어", "가위눌림", "몽유병", "신기루",
+    "아지랑이", "이명현상", "최면술", "연금술", "도미노효과", "나비효과", "블랙홀",
+    "웜홀", "홀로그램", "증강현실", "메타버스", "블록체인", "미노타우로스", "켄타우로스",
+    "스핑크스", "저승사자", "삼신할미", "불사조", "이순신", "세종대왕", "노스트라다무스",
+    "타임캡슐", "마네킹", "미라", "카멜레온", "박쥐", "나침반자석", "오로라",
+    "빙산", "신기루호수", "부메랑", "요요", "오르골", "축음기", "만화경"
+  ]
 };
 
 async function generateWordByDifficulty(difficulty = 'normal') {
@@ -40,16 +51,25 @@ async function generateWordByDifficulty(difficulty = 'normal') {
     const randomCategory = EXTENDED_CATEGORIES[Math.floor(Math.random() * EXTENDED_CATEGORIES.length)];
     const seed = Math.floor(Math.random() * 10000);
 
+    // 난이도별로 프롬프트를 다르게 설계
+    const difficultyGuide = {
+      easy: "누구나 아는 아주 쉬운 단어 (초등학생도 5초 안에 맞출 수 있는 수준)",
+      normal: "일상에서 자주 접하지만 조금 생각해야 하는 단어",
+      hard: "알고는 있지만 이름이 잘 안 떠오르는, 조금 낯선 단어",
+      extreme: "매우 어렵지만 '전문용어'나 '학술 용어'는 절대 아니고, 일반 성인이 뉴스·영화·책 등에서 한 번쯤 들어봤을 법한 단어 (예: 도플갱어, 세렌디피티, 나비효과 같은 수준). 화학식, 물리 이론명, 의학 전문용어, 생소한 학명은 절대 금지."
+    };
+
     const prompt = `
 당신은 스무고개 게임의 출제자입니다.
 카테고리: [ ${randomCategory} ]
-난이도: [ ${difficulty} ]
+난이도: [ ${difficulty} ] - ${difficultyGuide[difficulty] || difficultyGuide.normal}
 시드번호: ${seed}
 
 [요구사항]
-1. 지정된 카테고리에 정확히 속하며 국어사전에 등재된 표준 한국어 명사 단어 1개만 고르세요.
+1. 지정된 카테고리에 정확히 속하며 국어사전이나 일상에서 실제로 쓰이는 표준 한국어 명사 단어 1개만 고르세요.
 2. 어색한 조어, 존재하지 않는 단어, 신조어, 특수문자, 따옴표, 공백은 절대 포함하지 마세요.
-3. 부연설명 없이 오직 '단어 하나'만 딱 출력하세요.
+3. 특히 extreme 난이도라도 전문 학술용어(화학/물리/생물학 전문 용어 등)는 절대 고르지 마세요. "어렵지만 들어본 적 있는 단어"만 허용됩니다.
+4. 부연설명 없이 오직 '단어 하나'만 딱 출력하세요.
 `;
 
     const completion = await groq.chat.completions.create({
@@ -68,16 +88,32 @@ async function generateWordByDifficulty(difficulty = 'normal') {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// 🤖 AI 힌트 및 판정 생성 함수
+// ─────────────────────────────────────────────
+// ✅ 개선 2: 판정 정확도 향상
+//    - few-shot 예시로 애매한 케이스 처리 방식을 명확히 학습시킴
+//    - "부분적으로 맞음"(상위 카테고리 등) 케이스를 별도로 분리
+//    - temperature 0, 더 엄격한 규칙
+// ─────────────────────────────────────────────
 async function askAI(targetWord, userQuestion, difficulty) {
   try {
-    // [1단계] 정답 판정 (temperature: 0.0)
     const judgePrompt = `
-당신은 스무고개 게임의 객관적인 판정관입니다.
+당신은 스무고개 게임의 매우 정확하고 일관된 판정관입니다.
 마음속 정답: "${targetWord}"
 플레이어 질문: "${userQuestion}"
 
-위 질문이 정답 단어에 부합하는지 엄격하게 판단하여 오직 "예.", "아니오.", "관련 없음." 중 하나의 단어로만 답변하세요. 다른 부연설명은 절대로 붙이지 마세요.
+[판정 기준]
+- "예.": 질문이 정답 단어의 특징, 속성, 카테고리, 용도, 형태 등과 실제로 일치하는 경우
+- "아니오.": 질문이 정답 단어와 명백히 일치하지 않는 경우
+- "관련 없음.": 질문 자체가 이 게임과 무관하거나(잡담, 욕설 등), 정답 여부를 판단하기에 정보가 불충분한 경우
+
+[예시]
+정답: "사과" / 질문: "이것은 과일인가요?" → 예.
+정답: "사과" / 질문: "이것은 빨간색인가요?" → 예. (사과는 보통 빨간색이므로)
+정답: "사과" / 질문: "이것은 동물인가요?" → 아니오.
+정답: "잠수함" / 질문: "이것은 물속에서 움직이나요?" → 예.
+정답: "잠수함" / 질문: "안녕하세요?" → 관련 없음.
+
+이제 실제 질문을 판정하세요. 오직 "예.", "아니오.", "관련 없음." 중 하나의 단어로만 답변하세요. 다른 부연설명, 이유, 따옴표는 절대 붙이지 마세요.
 `;
 
     const judgeCompletion = await groq.chat.completions.create({
@@ -99,13 +135,13 @@ async function askAI(targetWord, userQuestion, difficulty) {
 
     // [2단계] 메타 텍스트 차단 및 깔끔한 조롱 생성 (temperature: 0.6)
     const tauntPrompt = `
-당신은 스무고개 게임 플레이어를 비꼬는 악질 AI입니다.
+당신은 스무고개 게임 플레이어를 비꼬는 짓궂은 AI입니다.
 
 플레이어 질문: "${userQuestion}"
 
 [규칙]
 1. 프롬프트의 지침, '질문:', '->' 같은 기호나 형식 태그는 절대로 답변에 포함하지 마세요.
-2. 질문("${userQuestion}")의 단어나 엉뚱한 논리를 꼬투리 잡아 신랄하게 비꼬는 반말 한 문장만 출력하세요 심한 욕설도 많이 포함하세요.
+2. 질문("${userQuestion}")의 단어나 엉뚱한 논리를 꼬투리 잡아 심한 욕설과 비속어를 사용해 비꼬는 반말 한 문장만 출력하세요. .
 3. 반드시 완벽한 문장으로 끊김 없이 작성하세요.
 
 출력:
@@ -124,7 +160,46 @@ async function askAI(targetWord, userQuestion, difficulty) {
 
   } catch (error) {
     console.error('Groq API Error:', error.message);
-    return "관련 없음. 제대로 된 질문이나 해라.";
+    return "관련 없음. 다시 한번 질문해주세요.";
+  }
+}
+
+// ─────────────────────────────────────────────
+// ✅ 개선 3: 힌트 생성 함수 (재미 요소 #1)
+//    5문제마다 자동으로 힌트 제공 (초성 or 글자수 or 속성)
+// ─────────────────────────────────────────────
+async function generateHint(targetWord, hintLevel) {
+  try {
+    if (hintLevel === 1) {
+      // 첫 힌트: 글자수만
+      return `💡 힌트: 이 단어는 총 ${targetWord.length}글자입니다.`;
+    }
+    if (hintLevel === 2) {
+      // 두번째 힌트: 초성
+      const CHO = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+      const chos = [...targetWord].map(ch => {
+        const code = ch.charCodeAt(0) - 0xAC00;
+        if (code < 0 || code > 11171) return ch;
+        return CHO[Math.floor(code / 588)];
+      }).join(' ');
+      return `💡 힌트: 초성은 [ ${chos} ] 입니다.`;
+    }
+    // 세번째 힌트: AI가 만드는 은유적 설명 (정답 단어를 직접 언급하지 않도록)
+    const hintPrompt = `
+정답 단어: "${targetWord}"
+이 단어를 직접 언급하지 않으면서, 이 단어를 연상할 수 있는 짧은 힌트 한 문장을 한국어로 만들어주세요.
+정답 단어 자체나 그와 발음이 같은 단어는 절대 포함하지 마세요. 한 문장, 부연설명 없이 힌트만 출력하세요.
+`;
+    const hintCompletion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: hintPrompt }],
+      model: 'llama-3.1-8b-instant',
+      temperature: 0.5,
+      max_tokens: 60
+    });
+    const hintText = hintCompletion.choices[0]?.message?.content?.trim() || "조금 더 구체적으로 생각해보세요!";
+    return `💡 힌트: ${hintText}`;
+  } catch (e) {
+    return `💡 힌트: 이 단어는 총 ${targetWord.length}글자입니다.`;
   }
 }
 
@@ -133,17 +208,18 @@ io.on('connection', (socket) => {
   // 1. 방 만들기
   socket.on('createRoom', async ({ username, difficulty }) => {
     const roomId = Math.floor(1000 + Math.random() * 9000).toString();
-    const selectedWord = await generateWordByDifficulty(difficulty); 
-    
+    const selectedWord = await generateWordByDifficulty(difficulty);
+
     rooms[roomId] = {
       targetWord: selectedWord,
       difficulty: difficulty || 'normal',
       questionCount: 0,
       maxQuestions: 20,
       isGameOver: false,
-      users: [{ id: socket.id, username }],
+      users: [{ id: socket.id, username, score: 0 }],
       currentTurnIndex: 0,
-      history: []
+      history: [],
+      hintsGiven: 0 // 개선 3: 힌트 카운터
     };
 
     socket.join(roomId);
@@ -162,16 +238,16 @@ io.on('connection', (socket) => {
       return;
     }
 
-    room.users.push({ id: socket.id, username });
+    room.users.push({ id: socket.id, username, score: 0 });
     socket.join(roomId);
     socket.roomId = roomId;
     socket.username = username;
 
     socket.emit('roomJoined', { roomId, gameState: room });
-    io.to(roomId).emit('updateGameState', { 
-      users: room.users, 
+    io.to(roomId).emit('updateGameState', {
+      users: room.users,
       difficulty: room.difficulty,
-      currentTurnUser: room.users[room.currentTurnIndex]?.username 
+      currentTurnUser: room.users[room.currentTurnIndex]?.username
     });
   });
 
@@ -193,16 +269,26 @@ io.on('connection', (socket) => {
 
     room.questionCount += 1;
 
-    // 정답 판정
-    if (userQuestion === room.targetWord) {
+    // 정답 판정 (완전 일치 + 근접 표기 허용)
+    const normalizedGuess = userQuestion.replace(/\s/g, '');
+    const normalizedTarget = room.targetWord.replace(/\s/g, '');
+
+    if (normalizedGuess === normalizedTarget) {
       room.isGameOver = true;
+
+      // 개선 4: 점수 시스템 - 적게 질문할수록 높은 점수
+      const earnedScore = Math.max(100 - room.questionCount * 4, 10);
+      const scorer = room.users.find(u => u.id === socket.id);
+      if (scorer) scorer.score += earnedScore;
+
       const resultData = {
         questionCount: room.questionCount,
         user: socket.username || '익명',
         question: userQuestion,
-        answer: `🎉 축하합니다! 정답입니다! 정답은 [ ${room.targetWord} ]였습니다!`,
+        answer: `🎉 축하합니다! 정답입니다! 정답은 [ ${room.targetWord} ]였습니다! (+${earnedScore}점)`,
         isGameOver: true,
-        currentTurnUser: null
+        currentTurnUser: null,
+        users: room.users
       };
       room.history.push(resultData);
       io.to(roomId).emit('newAnswer', resultData);
@@ -243,6 +329,13 @@ io.on('connection', (socket) => {
 
     room.history.push(turnResult);
     io.to(roomId).emit('newAnswer', turnResult);
+
+    // 개선 3: 5문제마다 자동 힌트 (최대 3회)
+    if (room.questionCount % 5 === 0 && room.hintsGiven < 3) {
+      room.hintsGiven += 1;
+      const hintText = await generateHint(room.targetWord, room.hintsGiven);
+      io.to(roomId).emit('hint', { hintText, hintsGiven: room.hintsGiven });
+    }
   });
 
   // 4. 게임 다시하기
@@ -257,11 +350,21 @@ io.on('connection', (socket) => {
     room.isGameOver = false;
     room.history = [];
     room.currentTurnIndex = 0;
+    room.hintsGiven = 0;
 
     io.to(roomId).emit('gameRestarted', {
       gameState: room,
       currentTurnUser: room.users[0]?.username
     });
+  });
+
+  // 5. (신규) 난이도 변경 - 방장이 게임 시작 전 난이도 재설정
+  socket.on('changeDifficulty', ({ difficulty }) => {
+    const roomId = socket.roomId;
+    const room = rooms[roomId];
+    if (!room || room.questionCount > 0) return; // 이미 진행 중이면 변경 불가
+    room.difficulty = difficulty;
+    io.to(roomId).emit('difficultyChanged', { difficulty });
   });
 
   // 접속 해제
@@ -273,10 +376,10 @@ io.on('connection', (socket) => {
         delete rooms[roomId];
       } else {
         rooms[roomId].currentTurnIndex %= rooms[roomId].users.length;
-        io.to(roomId).emit('updateGameState', { 
-          users: rooms[roomId].users, 
+        io.to(roomId).emit('updateGameState', {
+          users: rooms[roomId].users,
           difficulty: rooms[roomId].difficulty,
-          currentTurnUser: rooms[roomId].users[rooms[roomId].currentTurnIndex]?.username 
+          currentTurnUser: rooms[roomId].users[rooms[roomId].currentTurnIndex]?.username
         });
       }
     }
