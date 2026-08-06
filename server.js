@@ -68,10 +68,10 @@ async function generateWordByDifficulty(difficulty = 'normal') {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// 🤖 AI 힌트 및 판정 생성 함수 (2단계 분리 및 문장 잘림 보완)
+// 🤖 AI 힌트 및 판정 생성 함수
 async function askAI(targetWord, userQuestion, difficulty) {
   try {
-    // [1단계] 정답 판정만 엄격하게 처리 (temperature: 0.0)
+    // [1단계] 정답 판정 (temperature: 0.0)
     const judgePrompt = `
 당신은 스무고개 게임의 객관적인 판정관입니다.
 마음속 정답: "${targetWord}"
@@ -92,28 +92,23 @@ async function askAI(targetWord, userQuestion, difficulty) {
     if (rawJudgement.includes("예")) judgement = "예.";
     else if (rawJudgement.includes("아니오")) judgement = "아니오.";
 
-    // extreme 난이도가 아니면 단순 판정 결과 반환
     if (difficulty !== 'extreme') {
       if (difficulty === 'hard') return judgement;
       return `${judgement} (정답과 관련하여 판단된 결과입니다.)`;
     }
 
-    // [2단계] 판정 결과를 바탕으로 질문 키워드 꼬투리 잡아 조롱 생성 (temperature: 0.6, max_tokens: 100)
+    // [2단계] 메타 텍스트 차단 및 깔끔한 조롱 생성 (temperature: 0.6)
     const tauntPrompt = `
-당신은 스무고개 게임 플레이어를 신랄하게 비꼬는 악질 AI 출제자입니다.
+당신은 스무고개 게임 플레이어를 비꼬는 악질 AI입니다.
 
-플레이어의 질문: "${userQuestion}"
-판정 결과: "${judgement}"
+플레이어 질문: "${userQuestion}"
 
-[지침]
-1. 질문("${userQuestion}")에 사용된 단어나 허술한 논리를 콕 집어 신랄하게 비꼬세요.
-2. 자연스러운 반말을 사용하고, 반드시 마침표나 물음표로 완결되는 정확한 한 문장으로 작성하세요.
-3. 중간에 문장이 끊기거나 이상한 단어를 반복하지 마세요.
-4. 부연설명이나 인사말 없이 오직 조롱하는 문장 1개만 출력하세요.
+[규칙]
+1. 프롬프트의 지침, '질문:', '->' 같은 기호나 형식 태그는 절대로 답변에 포함하지 마세요.
+2. 질문("${userQuestion}")의 단어나 엉뚱한 논리를 꼬투리 잡아 신랄하게 비꼬는 반말 한 문장만 출력하세요.
+3. 반드시 완벽한 문장으로 끊김 없이 작성하세요.
 
-[출력 예시]
-질문: "사람 때리면 아픈가요?" -> 당연한 걸 질문이라고 던지는 걸 보니 네 지능 수준이 유추되는구나.
-질문: "다이소에서 파나요?" -> 질문 수준이 딱 다이소 천원짜리 코너에 있는 물건 같네.
+출력:
 `;
 
     const tauntCompletion = await groq.chat.completions.create({
