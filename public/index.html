@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스무스무 - AI 스무고개</title>
-    <link rel="stylesheet" href="style.css?v=v2">
+    <link rel="stylesheet" href="style.css?v=v4">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
@@ -55,7 +55,13 @@
                 <div class="question-counter" style="margin-top:2px;">
                     남은 질문: <span id="questions-left">20</span>/20
                 </div>
+
+                <!-- ✅ 점수판 -->
+                <div id="scoreboard" class="scoreboard"></div>
             </div>
+
+            <!-- ✅ 힌트 박스: 5문제마다 갱신, 평소엔 숨김 -->
+            <div id="hint-box" class="hint-box hidden"></div>
 
             <div id="chat-window" class="chat-window">
                 <div class="system-message">게임 방에 입장했습니다. 질문이나 정답을 입력해보세요!</div>
@@ -70,6 +76,6 @@
         </div>
     </div>
 
-    <script src="script.js?v=v2"></script>
+    <script src="script.js?v=v4"></script>
 </body>
 </html>

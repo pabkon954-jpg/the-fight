@@ -19,6 +19,10 @@ const questionInput = document.getElementById('question-input');
 const sendBtn = document.getElementById('send-btn');
 const restartBtn = document.getElementById('restart-btn');
 
+// ✅ 신규: 힌트 박스 / 점수판 엘리먼트
+const hintBox = document.getElementById('hint-box');
+const scoreboard = document.getElementById('scoreboard');
+
 const DIFFICULTY_MAP = {
     easy: '쉬움',
     normal: '보통',
@@ -67,6 +71,16 @@ if (restartBtn) {
     });
 }
 
+// ✅ 신규: 점수판 렌더링 함수
+function renderScoreboard(users) {
+    if (!scoreboard || !users) return;
+    scoreboard.innerHTML = users
+        .slice()
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+        .map(u => `<span class="score-chip">${u.username}: <strong>${u.score || 0}</strong>점</span>`)
+        .join('');
+}
+
 // Socket 리스너
 
 socket.on('roomCreated', ({ roomId, gameState }) => {
@@ -85,10 +99,11 @@ socket.on('updateGameState', ({ users, difficulty, currentTurnUser }) => {
     if (playerCountDisplay) playerCountDisplay.textContent = users.length;
     if (difficultyDisplay && difficulty) difficultyDisplay.textContent = DIFFICULTY_MAP[difficulty] || difficulty;
     if (currentTurnDisplay && currentTurnUser) currentTurnDisplay.textContent = currentTurnUser;
+    renderScoreboard(users);
 });
 
 socket.on('newAnswer', (resultData) => {
-    const { questionCount, user, question, answer, isGameOver, currentTurnUser } = resultData;
+    const { questionCount, user, question, answer, isGameOver, currentTurnUser, users } = resultData;
 
     if (questionsLeftDisplay) questionsLeftDisplay.textContent = 20 - questionCount;
 
@@ -105,10 +120,33 @@ socket.on('newAnswer', (resultData) => {
 
     if (currentTurnDisplay && currentTurnUser) currentTurnDisplay.textContent = currentTurnUser;
 
+    // ✅ 정답을 맞혀서 점수가 갱신된 경우, 서버가 users 배열을 함께 보내줌
+    if (users) renderScoreboard(users);
+
     if (isGameOver) {
         if (questionInput) questionInput.disabled = true;
         if (sendBtn) sendBtn.disabled = true;
         if (restartBtn) restartBtn.classList.remove('hidden');
+    }
+});
+
+// ✅ 신규: 힌트 수신 리스너 — 이게 빠져있어서 힌트가 화면에 안 보였던 부분
+socket.on('hint', ({ hintText, hintsGiven }) => {
+    // 채팅창에도 힌트를 시스템 메시지 형태로 남김
+    if (chatWindow) {
+        const hintDiv = document.createElement('div');
+        hintDiv.className = 'system-message hint-message';
+        hintDiv.textContent = hintText;
+        chatWindow.appendChild(hintDiv);
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+
+    // 상단 힌트 박스에도 최신 힌트를 강조 표시
+    if (hintBox) {
+        hintBox.textContent = `${hintText} (${hintsGiven}/3)`;
+        hintBox.classList.remove('hidden');
+        hintBox.classList.add('hint-pulse');
+        setTimeout(() => hintBox.classList.remove('hint-pulse'), 600);
     }
 });
 
@@ -119,6 +157,11 @@ socket.on('gameRestarted', ({ gameState, currentTurnUser }) => {
     if (sendBtn) sendBtn.disabled = false;
     if (restartBtn) restartBtn.classList.add('hidden');
     if (currentTurnDisplay && currentTurnUser) currentTurnDisplay.textContent = currentTurnUser;
+    if (hintBox) {
+        hintBox.textContent = '';
+        hintBox.classList.add('hidden');
+    }
+    if (gameState && gameState.users) renderScoreboard(gameState.users);
 });
 
 function enterGameRoom(roomId, gameState) {
@@ -129,8 +172,15 @@ function enterGameRoom(roomId, gameState) {
         difficultyDisplay.textContent = DIFFICULTY_MAP[gameState.difficulty] || gameState.difficulty;
     }
     if (playerCountDisplay) playerCountDisplay.textContent = gameState.users.length;
-    
+
     if (currentTurnDisplay && gameState.users[gameState.currentTurnIndex]) {
         currentTurnDisplay.textContent = gameState.users[gameState.currentTurnIndex].username;
     }
+
+    if (hintBox) {
+        hintBox.textContent = '';
+        hintBox.classList.add('hidden');
+    }
+
+    renderScoreboard(gameState.users);
 }

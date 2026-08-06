@@ -200,3 +200,48 @@ input[type="text"]:focus, select:focus {
     width: auto;
     padding: 0 16px;
 }
+
+/* ─────────────────────────────────────
+   ✅ 신규: 점수판
+───────────────────────────────────── */
+.scoreboard {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.score-chip {
+    background-color: #1e2a4a;
+    border: 1px solid #3b82f6;
+    color: #93c5fd;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+/* ─────────────────────────────────────
+   ✅ 신규: 힌트 박스
+───────────────────────────────────── */
+.hint-box {
+    margin: 0 0 16px 0;
+    padding: 10px 14px;
+    background-color: #2a2410;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    color: #fbbf24;
+    font-weight: 600;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    transition: transform 0.15s ease;
+}
+
+.hint-box.hint-pulse {
+    transform: scale(1.03);
+}
+
+.hint-message {
+    color: #fbbf24 !important;
+    font-weight: 600;
+}
