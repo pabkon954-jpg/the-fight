@@ -291,3 +291,73 @@ input[type="text"]:focus, select:focus {
 .btn.ghost:hover {
     background-color: #2a2a2a;
 }
+
+/* ✅ 신규: AI 답변 대기 중 표시기 */
+.typing-indicator {
+    color: #f59e0b !important;
+    font-style: italic;
+    animation: pulseFade 1.2s ease-in-out infinite;
+}
+
+@keyframes pulseFade {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+/* ─────────────────────────────────────
+   ✅ 신규: 카테고리 복수 선택 체크박스 그리드
+───────────────────────────────────── */
+.category-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.link-btn {
+    background: none;
+    border: 1px solid #444;
+    color: #93c5fd;
+    font-size: 0.75rem;
+    padding: 3px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.link-btn:hover {
+    background-color: #2a2a2a;
+}
+
+.category-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    background-color: #181818;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.category-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: #ddd;
+    cursor: pointer;
+    padding: 3px 4px;
+    border-radius: 4px;
+}
+
+.category-checkbox:hover {
+    background-color: #222;
+}
+
+.category-checkbox input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    accent-color: #3b82f6;
+    cursor: pointer;
+}
