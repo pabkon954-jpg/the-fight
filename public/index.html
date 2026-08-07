@@ -1,15 +1,19 @@
+
+bash
+
+cat > /mnt/user-data/outputs/index.html << 'HTMLEOF'
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스무스무 - AI 스무고개</title>
-    <link rel="stylesheet" href="style.css?v=v6">
+    <link rel="stylesheet" href="style.css?v=v7">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
     <div id="app">
-        <!-- 메인 로비 -->
+        <!-- 메인 로비: 닉네임 입력 + 방 만들기/입장만. 난이도·카테고리·점수/힌트 설정은 방 안에서만 볼 수 있음 -->
         <div id="lobby" class="card">
             <h1>스무스무 🎲</h1>
             <p class="subtitle">AI와 함께하는 멀티플레이 스무고개</p>
@@ -19,26 +23,8 @@
                 <input type="text" id="username" placeholder="닉네임을 입력하세요" maxlength="10">
             </div>
 
-            <div class="input-group">
-                <label for="difficulty">난이도 선택 (방장만 대기실에서 변경 가능)</label>
-                <select id="difficulty">
-                    <option value="easy">쉬움 (힌트 제공)</option>
-                    <option value="normal" selected>보통 (짧은 설명)</option>
-                    <option value="hard">어려움 (단답형)</option>
-                    <option value="extreme">극악 (알쏭달쏭)</option>
-                </select>
-            </div>
-
-            <div class="input-group">
-                <label>정답 카테고리 (복수 선택 가능, 아무것도 선택 안 하면 전체 랜덤)</label>
-                <div class="category-toolbar">
-                    <button type="button" class="link-btn" data-target="category-grid" data-action="all">전체 선택</button>
-                    <button type="button" class="link-btn" data-target="category-grid" data-action="none">전체 해제</button>
-                </div>
-                <div id="category-grid" class="category-grid"></div>
-            </div>
-
             <button id="create-room-btn" class="btn primary">방 만들기</button>
+            <p class="hint-text">방을 만들면 대기실에서 난이도·카테고리·점수/힌트 사용 여부를 정할 수 있어요.</p>
 
             <div class="divider">
                 <span>또는 기존 방 입장</span>
@@ -63,6 +49,10 @@
                 <div class="room-info" style="margin-top:2px;">
                     <span>카테고리: <strong id="category-display" style="color:#a78bfa;">랜덤(전체)</strong></span>
                 </div>
+                <div class="room-info" style="margin-top:2px; font-size:0.78rem; color:#999;">
+                    <span>점수: <strong id="score-status-display">사용</strong></span>
+                    <span>힌트: <strong id="hint-status-display">사용</strong></span>
+                </div>
                 <div class="turn-info" style="margin-top:4px;">
                     현재 차례: <span id="current-turn-user" style="color:#3b82f6; font-weight:bold;">-</span>
                 </div>
@@ -83,7 +73,7 @@
                             <option value="easy">쉬움 (힌트 제공)</option>
                             <option value="normal">보통 (짧은 설명)</option>
                             <option value="hard">어려움 (단답형)</option>
-                            <option value="extreme">극악 (알쏭달쏭)</option>
+                            <option value="extreme">극악무도 (알쏭달쏭)</option>
                         </select>
                     </div>
                     <div class="input-group">
@@ -94,11 +84,27 @@
                         </div>
                         <div id="edit-category-grid" class="category-grid"></div>
                     </div>
+
+                    <div class="input-group toggle-group">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggle-score" checked>
+                            <span>🏆 점수 기능 사용 (정답까지 걸린 질문 수로 점수 계산)</span>
+                        </label>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggle-hint" checked>
+                            <span>💡 힌트 기능 사용 (5문제마다 자동 힌트, 사용 시 점수 차감)</span>
+                        </label>
+                    </div>
+
                     <button id="start-game-btn" class="btn primary">🎮 게임 시작</button>
                 </div>
                 <div id="guest-waiting" class="hidden">
                     <p class="panel-title">⏳ 방장이 설정을 정하는 중입니다...</p>
-                    <p class="waiting-detail">현재 설정 — 난이도: <strong id="waiting-difficulty">-</strong><br>카테고리: <strong id="waiting-category">-</strong></p>
+                    <p class="waiting-detail">
+                        난이도: <strong id="waiting-difficulty">-</strong><br>
+                        카테고리: <strong id="waiting-category">-</strong><br>
+                        점수 기능: <strong id="waiting-score">-</strong> / 힌트 기능: <strong id="waiting-hint">-</strong>
+                    </p>
                 </div>
             </div>
 
@@ -123,6 +129,6 @@
         </div>
     </div>
 
-    <script src="script.js?v=v6"></script>
+    <script src="script.js?v=v7"></script>
 </body>
 </html>

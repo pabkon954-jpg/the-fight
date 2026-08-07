@@ -1,3 +1,4 @@
+cat > /mnt/user-data/outputs/server.js << 'SERVEREOF'
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -60,8 +61,6 @@ const WORD_POOLS = {
   ]
 };
 
-// ✅ categories: 사용자가 체크박스로 선택한 카테고리 배열. 비어있으면 전체 카테고리 중 랜덤.
-// ✅ difficulty는 카테고리 선택 여부와 무관하게 항상 함께 적용됨 (프롬프트에 둘 다 명시).
 async function generateWordByDifficulty(difficulty = 'normal', categories = []) {
   try {
     const pool = (Array.isArray(categories) && categories.length > 0) ? categories : EXTENDED_CATEGORIES;
@@ -75,7 +74,6 @@ async function generateWordByDifficulty(difficulty = 'normal', categories = []) 
       extreme: "매우 어렵지만 '전문용어'나 '학술 용어'는 절대 아니고, 일반 성인이 뉴스·영화·책 등에서 한 번쯤 들어봤을 법한 단어 (예: 도플갱어, 세렌디피티, 나비효과 같은 수준). 화학식, 물리 이론명, 의학 전문용어, 생소한 학명은 절대 금지."
     };
 
-    // ✅ 카테고리와 난이도를 동시에 명시해서, 카테고리를 고르더라도 난이도가 반드시 함께 반영되도록 함
     const prompt = `
 당신은 스무고개 게임의 출제자입니다.
 카테고리: [ ${chosenCategory} ]
@@ -216,15 +214,18 @@ function publicGameState(room) {
 
 io.on('connection', (socket) => {
 
-  // 1. 방 만들기 — 대기실(설정) 상태로 생성됨. categories는 배열(복수 선택), 비어있으면 전체 랜덤.
-  socket.on('createRoom', ({ username, difficulty, categories }) => {
+  // 1. 방 만들기 — ✅ 닉네임만 받고, 난이도/카테고리/점수·힌트 사용 여부는 전부 기본값으로 시작.
+  //    (방에 들어간 뒤 방장이 대기실에서 설정하도록 변경)
+  socket.on('createRoom', ({ username }) => {
     const roomId = Math.floor(1000 + Math.random() * 9000).toString();
 
     rooms[roomId] = {
       hostId: socket.id,
       targetWord: null,
-      difficulty: difficulty || 'normal',
-      categories: Array.isArray(categories) ? categories : [],
+      difficulty: 'normal',
+      categories: [],
+      scoreEnabled: true,
+      hintEnabled: true,
       gameStarted: false,
       questionCount: 0,
       maxQuestions: 20,
@@ -241,7 +242,7 @@ io.on('connection', (socket) => {
     socket.roomId = roomId;
     socket.username = username;
 
-    console.log(`[방 생성] 코드: ${roomId} | 난이도: ${difficulty} | 카테고리: ${JSON.stringify(categories)}`);
+    console.log(`[방 생성] 코드: ${roomId}`);
     socket.emit('roomCreated', { roomId, gameState: publicGameState(rooms[roomId]) });
   });
 
@@ -262,19 +263,27 @@ io.on('connection', (socket) => {
     io.to(roomId).emit('updateGameState', publicGameState(room));
   });
 
-  // 3. 대기실에서 난이도/카테고리 설정 변경 — 호스트만, 게임 시작 전에만 가능
-  socket.on('updateSettings', ({ difficulty, categories }) => {
+  // 3. 대기실에서 설정 변경 — 호스트만, 게임 시작 전에만 가능
+  //    ✅ 난이도 / 카테고리 / 점수 기능 사용 여부 / 힌트 기능 사용 여부
+  socket.on('updateSettings', ({ difficulty, categories, scoreEnabled, hintEnabled }) => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
     if (!room || room.gameStarted || socket.id !== room.hostId) return;
 
     if (difficulty) room.difficulty = difficulty;
     if (Array.isArray(categories)) room.categories = categories;
+    if (typeof scoreEnabled === 'boolean') room.scoreEnabled = scoreEnabled;
+    if (typeof hintEnabled === 'boolean') room.hintEnabled = hintEnabled;
 
-    io.to(roomId).emit('settingsUpdated', { difficulty: room.difficulty, categories: room.categories });
+    io.to(roomId).emit('settingsUpdated', {
+      difficulty: room.difficulty,
+      categories: room.categories,
+      scoreEnabled: room.scoreEnabled,
+      hintEnabled: room.hintEnabled
+    });
   });
 
-  // 4. 게임 시작 — 호스트만, 이 시점에 실제로 AI가 (카테고리+난이도 모두 반영해서) 단어를 생성함
+  // 4. 게임 시작 — 호스트만
   socket.on('startGame', async () => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
@@ -292,7 +301,7 @@ io.on('connection', (socket) => {
     room.hintPenalty = 0;
     room.pendingQuestion = false;
 
-    console.log(`[게임 시작] 방: ${roomId} | 난이도: ${room.difficulty} | 카테고리: ${JSON.stringify(room.categories)} | 정답: ${word}`);
+    console.log(`[게임 시작] 방: ${roomId} | 난이도: ${room.difficulty} | 카테고리: ${JSON.stringify(room.categories)} | 점수: ${room.scoreEnabled} | 힌트: ${room.hintEnabled} | 정답: ${word}`);
 
     io.to(roomId).emit('gameStarted', {
       gameState: publicGameState(room),
@@ -313,7 +322,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // 이전 질문이 AI 응답을 기다리는 중이면 새 질문을 거부 (질문 밀림 방지)
     if (room.pendingQuestion) {
       socket.emit('errorMessage', '이전 질문에 대한 AI 답변을 기다리는 중입니다. 잠시만 기다려주세요.');
       return;
@@ -332,15 +340,19 @@ io.on('connection', (socket) => {
       if (normalizedGuess === normalizedTarget) {
         room.isGameOver = true;
 
-        const earnedScore = Math.max(100 - room.questionCount * 4 - (room.hintPenalty || 0), 10);
-        const scorer = room.users.find(u => u.id === socket.id);
-        if (scorer) scorer.score += earnedScore;
+        let scoreText = '';
+        if (room.scoreEnabled) {
+          const earnedScore = Math.max(100 - room.questionCount * 4 - (room.hintPenalty || 0), 10);
+          const scorer = room.users.find(u => u.id === socket.id);
+          if (scorer) scorer.score += earnedScore;
+          scoreText = ` (+${earnedScore}점${room.hintPenalty ? `, 힌트 사용으로 -${room.hintPenalty}점 차감됨` : ''})`;
+        }
 
         const resultData = {
           questionCount: room.questionCount,
           user: socket.username || '익명',
           question: userQuestion,
-          answer: `🎉 축하합니다! 정답입니다! 정답은 [ ${room.targetWord} ]였습니다! (+${earnedScore}점${room.hintPenalty ? `, 힌트 사용으로 -${room.hintPenalty}점 차감됨` : ''})`,
+          answer: `🎉 축하합니다! 정답입니다! 정답은 [ ${room.targetWord} ]였습니다!${scoreText}`,
           isGameOver: true,
           currentTurnUser: null,
           users: room.users
@@ -385,8 +397,8 @@ io.on('connection', (socket) => {
       room.pendingQuestion = false;
     }
 
-    // 5문제마다 자동 힌트 (최대 3회) — 사용 시 점수 차감
-    if (!room.isGameOver && room.questionCount % 5 === 0 && room.hintsGiven < 3) {
+    // ✅ 힌트 기능이 켜져 있을 때만 5문제마다 자동 힌트 (최대 3회)
+    if (room.hintEnabled && !room.isGameOver && room.questionCount % 5 === 0 && room.hintsGiven < 3) {
       room.hintsGiven += 1;
       room.hintPenalty += HINT_PENALTY;
       const hintText = await generateHint(room.targetWord, room.hintsGiven);
