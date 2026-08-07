@@ -245,3 +245,49 @@ input[type="text"]:focus, select:focus {
     color: #fbbf24 !important;
     font-weight: 600;
 }
+
+/* ─────────────────────────────────────
+   ✅ 신규: 대기실(설정) 패널
+───────────────────────────────────── */
+.pre-game-panel {
+    background-color: #191919;
+    border: 1px solid #333;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.panel-title {
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: #f59e0b;
+    margin-bottom: 12px;
+}
+
+.waiting-detail {
+    font-size: 0.85rem;
+    color: #ccc;
+    line-height: 1.6;
+}
+
+#host-settings select {
+    margin-bottom: 12px;
+}
+
+/* 게임 종료 후 액션 버튼 영역 */
+.post-game-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 15px;
+}
+
+.btn.ghost {
+    background-color: transparent;
+    border: 1px solid #6b7280;
+    color: #d1d5db;
+}
+
+.btn.ghost:hover {
+    background-color: #2a2a2a;
+}

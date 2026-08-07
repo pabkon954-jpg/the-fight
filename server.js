@@ -28,30 +28,48 @@ const EXTENDED_CATEGORIES = [
   "캠핑/야외용품", "도서/학문분야", "무기/방어구", "도시/국가", "마법/판타지요소"
 ];
 
+const HINT_PENALTY = 15; // 힌트 1회당 최종 점수에서 차감되는 점수
+
 // ─────────────────────────────────────────────
-// ✅ 개선 1: 극악난이도(extreme)를 "전문용어"가 아니라
-//    "다들 들어는 봤지만 막상 맞히려면 헷갈리는 단어"로 교체
+// ✅ 개선: 난이도별 단어풀을 대폭 확장 (AI 생성 실패 시 폴백용 + 다양성 확보)
 // ─────────────────────────────────────────────
 const WORD_POOLS = {
-  easy: ["사과", "바나나", "호랑이", "강아지", "고양이", "비행기", "컴퓨터", "스마트폰", "피자", "축구공", "냉장고", "자동차", "우산", "자전거", "피아노"],
-  normal: ["전자레인지", "인공위성", "회전목마", "에펠탑", "선인장", "소방차", "도서관", "박물관", "나침반", "망원경", "잠수함", "타자기", "해바라기", "신문지"],
-  hard: ["주상절리", "측우기", "판소리", "해파리", "메트로놈", "피뢰침", "도굴꾼", "시계추", "모래시계", "굴삭기", "상형문자", "현악기"],
+  easy: [
+    "사과", "바나나", "호랑이", "강아지", "고양이", "비행기", "컴퓨터", "스마트폰", "피자", "축구공",
+    "냉장고", "자동차", "우산", "자전거", "피아노", "책상", "의자", "연필", "지우개", "가방",
+    "신발", "모자", "시계", "거울", "베개", "이불", "숟가락", "젓가락", "컵", "그릇",
+    "창문", "계단", "버스", "기차", "풍선", "비누", "칫솔", "수건", "장갑", "목도리"
+  ],
+  normal: [
+    "전자레인지", "인공위성", "회전목마", "에펠탑", "선인장", "소방차", "도서관", "박물관", "나침반", "망원경",
+    "잠수함", "타자기", "해바라기", "신문지", "세탁기", "청소기", "드라이기", "가습기", "공기청정기", "정수기",
+    "보일러", "에어컨", "선풍기", "다리미", "재봉틀", "현미경", "저울", "온도계", "우체통", "신호등",
+    "가로등", "분수대", "동물원", "놀이공원", "수족관", "전망대", "케이블카", "관람차", "미끄럼틀", "그네"
+  ],
+  hard: [
+    "주상절리", "측우기", "판소리", "해파리", "메트로놈", "피뢰침", "도굴꾼", "시계추", "모래시계", "굴삭기",
+    "상형문자", "현악기", "물레방아", "맷돌", "오르간", "트라이앵글", "탬버린", "비파", "가야금", "거문고",
+    "해시계", "윷놀이", "제기", "팽이", "굴렁쇠", "죽마", "고무신", "짚신", "놋그릇", "다듬이",
+    "부표", "등대", "풍향계", "저인망", "지게", "물시계", "쇠스랑", "써레", "디딜방아", "베틀"
+  ],
   extreme: [
     "도플갱어", "데자뷰", "세렌디피티", "노스탤지어", "가위눌림", "몽유병", "신기루",
     "아지랑이", "이명현상", "최면술", "연금술", "도미노효과", "나비효과", "블랙홀",
     "웜홀", "홀로그램", "증강현실", "메타버스", "블록체인", "미노타우로스", "켄타우로스",
     "스핑크스", "저승사자", "삼신할미", "불사조", "이순신", "세종대왕", "노스트라다무스",
-    "타임캡슐", "마네킹", "미라", "카멜레온", "박쥐", "나침반자석", "오로라",
-    "빙산", "신기루호수", "부메랑", "요요", "오르골", "축음기", "만화경"
+    "타임캡슐", "마네킹", "미라", "카멜레온", "박쥐", "오로라", "빙산", "부메랑",
+    "요요", "오르골", "축음기", "만화경", "판도라", "시지프스", "프로메테우스",
+    "메두사", "키메라", "페가수스", "그리핀", "트로이목마", "아킬레스건", "이어도"
   ]
 };
 
-async function generateWordByDifficulty(difficulty = 'normal') {
+async function generateWordByDifficulty(difficulty = 'normal', category = '랜덤') {
   try {
-    const randomCategory = EXTENDED_CATEGORIES[Math.floor(Math.random() * EXTENDED_CATEGORIES.length)];
+    const chosenCategory = (category && category !== '랜덤')
+      ? category
+      : EXTENDED_CATEGORIES[Math.floor(Math.random() * EXTENDED_CATEGORIES.length)];
     const seed = Math.floor(Math.random() * 10000);
 
-    // 난이도별로 프롬프트를 다르게 설계
     const difficultyGuide = {
       easy: "누구나 아는 아주 쉬운 단어 (초등학생도 5초 안에 맞출 수 있는 수준)",
       normal: "일상에서 자주 접하지만 조금 생각해야 하는 단어",
@@ -61,7 +79,7 @@ async function generateWordByDifficulty(difficulty = 'normal') {
 
     const prompt = `
 당신은 스무고개 게임의 출제자입니다.
-카테고리: [ ${randomCategory} ]
+카테고리: [ ${chosenCategory} ]
 난이도: [ ${difficulty} ] - ${difficultyGuide[difficulty] || difficultyGuide.normal}
 시드번호: ${seed}
 
@@ -84,16 +102,11 @@ async function generateWordByDifficulty(difficulty = 'normal') {
     console.error('단어 생성 오류:', e.message);
   }
 
+  // 폴백: 카테고리 지정 여부와 무관하게 난이도 풀에서 무작위 선택
   const pool = WORD_POOLS[difficulty] || WORD_POOLS.normal;
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// ─────────────────────────────────────────────
-// ✅ 개선 2: 판정 정확도 향상
-//    - few-shot 예시로 애매한 케이스 처리 방식을 명확히 학습시킴
-//    - "부분적으로 맞음"(상위 카테고리 등) 케이스를 별도로 분리
-//    - temperature 0, 더 엄격한 규칙
-// ─────────────────────────────────────────────
 async function askAI(targetWord, userQuestion, difficulty) {
   try {
     const judgePrompt = `
@@ -133,7 +146,6 @@ async function askAI(targetWord, userQuestion, difficulty) {
       return `${judgement} (정답과 관련하여 판단된 결과입니다.)`;
     }
 
-    // [2단계] 메타 텍스트 차단 및 깔끔한 조롱 생성 (temperature: 0.6)
     const tauntPrompt = `
 당신은 스무고개 게임 플레이어를 비꼬는 짓궂은 AI입니다.
 
@@ -164,18 +176,12 @@ async function askAI(targetWord, userQuestion, difficulty) {
   }
 }
 
-// ─────────────────────────────────────────────
-// ✅ 개선 3: 힌트 생성 함수 (재미 요소 #1)
-//    5문제마다 자동으로 힌트 제공 (초성 or 글자수 or 속성)
-// ─────────────────────────────────────────────
 async function generateHint(targetWord, hintLevel) {
   try {
     if (hintLevel === 1) {
-      // 첫 힌트: 글자수만
       return `💡 힌트: 이 단어는 총 ${targetWord.length}글자입니다.`;
     }
     if (hintLevel === 2) {
-      // 두번째 힌트: 초성
       const CHO = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
       const chos = [...targetWord].map(ch => {
         const code = ch.charCodeAt(0) - 0xAC00;
@@ -184,7 +190,6 @@ async function generateHint(targetWord, hintLevel) {
       }).join(' ');
       return `💡 힌트: 초성은 [ ${chos} ] 입니다.`;
     }
-    // 세번째 힌트: AI가 만드는 은유적 설명 (정답 단어를 직접 언급하지 않도록)
     const hintPrompt = `
 정답 단어: "${targetWord}"
 이 단어를 직접 언급하지 않으면서, 이 단어를 연상할 수 있는 짧은 힌트 한 문장을 한국어로 만들어주세요.
@@ -203,31 +208,40 @@ async function generateHint(targetWord, hintLevel) {
   }
 }
 
+function publicGameState(room) {
+  // 클라이언트에 보낼 때 targetWord는 제외
+  const { targetWord, ...rest } = room;
+  return rest;
+}
+
 io.on('connection', (socket) => {
 
-  // 1. 방 만들기
-  socket.on('createRoom', async ({ username, difficulty }) => {
+  // 1. 방 만들기 — ✅ 더 이상 즉시 게임이 시작되지 않고, 대기실(설정) 상태로 생성됨
+  socket.on('createRoom', ({ username, difficulty, category }) => {
     const roomId = Math.floor(1000 + Math.random() * 9000).toString();
-    const selectedWord = await generateWordByDifficulty(difficulty);
 
     rooms[roomId] = {
-      targetWord: selectedWord,
+      hostId: socket.id,
+      targetWord: null,
       difficulty: difficulty || 'normal',
+      category: category || '랜덤',
+      gameStarted: false,
       questionCount: 0,
       maxQuestions: 20,
       isGameOver: false,
       users: [{ id: socket.id, username, score: 0 }],
       currentTurnIndex: 0,
       history: [],
-      hintsGiven: 0 // 개선 3: 힌트 카운터
+      hintsGiven: 0,
+      hintPenalty: 0
     };
 
     socket.join(roomId);
     socket.roomId = roomId;
     socket.username = username;
 
-    console.log(`[방 생성] 코드: ${roomId} | 난이도: ${difficulty} | 정답: ${selectedWord}`);
-    socket.emit('roomCreated', { roomId, gameState: rooms[roomId] });
+    console.log(`[방 생성] 코드: ${roomId} | 난이도: ${difficulty} | 카테고리: ${category}`);
+    socket.emit('roomCreated', { roomId, gameState: publicGameState(rooms[roomId]) });
   });
 
   // 2. 방 참가하기
@@ -243,20 +257,53 @@ io.on('connection', (socket) => {
     socket.roomId = roomId;
     socket.username = username;
 
-    socket.emit('roomJoined', { roomId, gameState: room });
-    io.to(roomId).emit('updateGameState', {
-      users: room.users,
-      difficulty: room.difficulty,
-      currentTurnUser: room.users[room.currentTurnIndex]?.username
+    socket.emit('roomJoined', { roomId, gameState: publicGameState(room) });
+    io.to(roomId).emit('updateGameState', publicGameState(room));
+  });
+
+  // 3. (신규) 대기실에서 난이도/카테고리 설정 변경 — 호스트만, 게임 시작 전에만 가능
+  socket.on('updateSettings', ({ difficulty, category }) => {
+    const roomId = socket.roomId;
+    const room = rooms[roomId];
+    if (!room || room.gameStarted || socket.id !== room.hostId) return;
+
+    if (difficulty) room.difficulty = difficulty;
+    if (category) room.category = category;
+
+    io.to(roomId).emit('settingsUpdated', { difficulty: room.difficulty, category: room.category });
+  });
+
+  // 4. (신규) 게임 시작 — 호스트만, 이 시점에 실제로 AI가 단어를 생성함
+  socket.on('startGame', async () => {
+    const roomId = socket.roomId;
+    const room = rooms[roomId];
+    if (!room || room.gameStarted || socket.id !== room.hostId) return;
+    if (room.users.length < 1) return;
+
+    const word = await generateWordByDifficulty(room.difficulty, room.category);
+    room.targetWord = word;
+    room.gameStarted = true;
+    room.isGameOver = false;
+    room.questionCount = 0;
+    room.currentTurnIndex = 0;
+    room.history = [];
+    room.hintsGiven = 0;
+    room.hintPenalty = 0;
+
+    console.log(`[게임 시작] 방: ${roomId} | 난이도: ${room.difficulty} | 카테고리: ${room.category} | 정답: ${word}`);
+
+    io.to(roomId).emit('gameStarted', {
+      gameState: publicGameState(room),
+      currentTurnUser: room.users[0]?.username
     });
   });
 
-  // 3. 질문/정답 처리
+  // 5. 질문/정답 처리
   socket.on('sendQuestion', async ({ question }) => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
 
-    if (!room || room.isGameOver) return;
+    if (!room || !room.gameStarted || room.isGameOver) return;
 
     const currentTurnUser = room.users[room.currentTurnIndex];
     if (currentTurnUser.id !== socket.id) {
@@ -269,15 +316,13 @@ io.on('connection', (socket) => {
 
     room.questionCount += 1;
 
-    // 정답 판정 (완전 일치 + 근접 표기 허용)
     const normalizedGuess = userQuestion.replace(/\s/g, '');
     const normalizedTarget = room.targetWord.replace(/\s/g, '');
 
     if (normalizedGuess === normalizedTarget) {
       room.isGameOver = true;
 
-      // 개선 4: 점수 시스템 - 적게 질문할수록 높은 점수
-      const earnedScore = Math.max(100 - room.questionCount * 4, 10);
+      const earnedScore = Math.max(100 - room.questionCount * 4 - (room.hintPenalty || 0), 10);
       const scorer = room.users.find(u => u.id === socket.id);
       if (scorer) scorer.score += earnedScore;
 
@@ -285,7 +330,7 @@ io.on('connection', (socket) => {
         questionCount: room.questionCount,
         user: socket.username || '익명',
         question: userQuestion,
-        answer: `🎉 축하합니다! 정답입니다! 정답은 [ ${room.targetWord} ]였습니다! (+${earnedScore}점)`,
+        answer: `🎉 축하합니다! 정답입니다! 정답은 [ ${room.targetWord} ]였습니다! (+${earnedScore}점${room.hintPenalty ? `, 힌트 사용으로 -${room.hintPenalty}점 차감됨` : ''})`,
         isGameOver: true,
         currentTurnUser: null,
         users: room.users
@@ -295,10 +340,8 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // AI 답변 생성
     const aiAnswer = await askAI(room.targetWord, userQuestion, room.difficulty);
 
-    // 20개 소진 게임 오버
     if (room.questionCount >= room.maxQuestions) {
       room.isGameOver = true;
       const resultData = {
@@ -314,7 +357,6 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // 다음 차례 진행
     room.currentTurnIndex = (room.currentTurnIndex + 1) % room.users.length;
     const nextTurnUser = room.users[room.currentTurnIndex].username;
 
@@ -330,57 +372,64 @@ io.on('connection', (socket) => {
     room.history.push(turnResult);
     io.to(roomId).emit('newAnswer', turnResult);
 
-    // 개선 3: 5문제마다 자동 힌트 (최대 3회)
+    // 5문제마다 자동 힌트 (최대 3회) — 사용 시 점수 차감
     if (room.questionCount % 5 === 0 && room.hintsGiven < 3) {
       room.hintsGiven += 1;
+      room.hintPenalty += HINT_PENALTY;
       const hintText = await generateHint(room.targetWord, room.hintsGiven);
-      io.to(roomId).emit('hint', { hintText, hintsGiven: room.hintsGiven });
+      io.to(roomId).emit('hint', { hintText, hintsGiven: room.hintsGiven, penalty: room.hintPenalty });
     }
   });
 
-  // 4. 게임 다시하기
+  // 6. 게임 다시하기 (동일 설정으로 빠른 재시작)
   socket.on('restartGame', async () => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
     if (!room) return;
 
-    const newWord = await generateWordByDifficulty(room.difficulty);
+    const newWord = await generateWordByDifficulty(room.difficulty, room.category);
     room.targetWord = newWord;
+    room.gameStarted = true;
     room.questionCount = 0;
     room.isGameOver = false;
     room.history = [];
     room.currentTurnIndex = 0;
     room.hintsGiven = 0;
+    room.hintPenalty = 0;
 
     io.to(roomId).emit('gameRestarted', {
-      gameState: room,
+      gameState: publicGameState(room),
       currentTurnUser: room.users[0]?.username
     });
   });
 
-  // 5. (신규) 난이도 변경 - 방장이 게임 시작 전 난이도 재설정
-  socket.on('changeDifficulty', ({ difficulty }) => {
+  // 7. (신규) 설정 화면으로 돌아가기 — 호스트만, 카테고리/난이도를 바꿔서 다시 시작하고 싶을 때
+  socket.on('backToSettings', () => {
     const roomId = socket.roomId;
     const room = rooms[roomId];
-    if (!room || room.questionCount > 0) return; // 이미 진행 중이면 변경 불가
-    room.difficulty = difficulty;
-    io.to(roomId).emit('difficultyChanged', { difficulty });
+    if (!room || socket.id !== room.hostId) return;
+
+    room.gameStarted = false;
+    room.isGameOver = false;
+    room.targetWord = null;
+
+    io.to(roomId).emit('settingsReopened', { gameState: publicGameState(room) });
   });
 
   // 접속 해제
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
     if (roomId && rooms[roomId]) {
-      rooms[roomId].users = rooms[roomId].users.filter(u => u.id !== socket.id);
-      if (rooms[roomId].users.length === 0) {
+      const room = rooms[roomId];
+      const wasHost = room.hostId === socket.id;
+      room.users = room.users.filter(u => u.id !== socket.id);
+
+      if (room.users.length === 0) {
         delete rooms[roomId];
       } else {
-        rooms[roomId].currentTurnIndex %= rooms[roomId].users.length;
-        io.to(roomId).emit('updateGameState', {
-          users: rooms[roomId].users,
-          difficulty: rooms[roomId].difficulty,
-          currentTurnUser: rooms[roomId].users[rooms[roomId].currentTurnIndex]?.username
-        });
+        if (wasHost) room.hostId = room.users[0].id; // 호스트 위임
+        room.currentTurnIndex %= room.users.length;
+        io.to(roomId).emit('updateGameState', publicGameState(room));
       }
     }
   });

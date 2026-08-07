@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>스무스무 - AI 스무고개</title>
-    <link rel="stylesheet" href="style.css?v=v4">
+    <link rel="stylesheet" href="style.css?v=v5">
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
@@ -20,12 +20,19 @@
             </div>
 
             <div class="input-group">
-                <label for="difficulty">난이도 선택</label>
+                <label for="difficulty">난이도 선택 (방장만 대기실에서 변경 가능)</label>
                 <select id="difficulty">
                     <option value="easy">쉬움 (힌트 제공)</option>
                     <option value="normal" selected>보통 (짧은 설명)</option>
                     <option value="hard">어려움 (단답형)</option>
                     <option value="extreme">극악 (알쏭달쏭)</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label for="category">정답 카테고리</label>
+                <select id="category">
+                    <option value="랜덤" selected>🎲 랜덤 (아무 카테고리)</option>
                 </select>
             </div>
 
@@ -41,13 +48,16 @@
             </div>
         </div>
 
-        <!-- 게임 진행 화면 -->
+        <!-- 게임 방 화면 -->
         <div id="game-room" class="card hidden">
             <div class="room-header">
                 <div class="room-info">
                     <span>방 코드: <strong id="room-code-display">-</strong></span>
-                    <span>난이도: <strong id="difficulty-display" style="color:#f59e0b;">보통</strong></span>
                     <span>참여 인원: <strong id="player-count">0</strong>명</span>
+                </div>
+                <div class="room-info" style="margin-top:2px;">
+                    <span>난이도: <strong id="difficulty-display" style="color:#f59e0b;">보통</strong></span>
+                    <span>카테고리: <strong id="category-display" style="color:#a78bfa;">랜덤</strong></span>
                 </div>
                 <div class="turn-info" style="margin-top:4px;">
                     현재 차례: <span id="current-turn-user" style="color:#3b82f6; font-weight:bold;">-</span>
@@ -56,26 +66,57 @@
                     남은 질문: <span id="questions-left">20</span>/20
                 </div>
 
-                <!-- ✅ 점수판 -->
                 <div id="scoreboard" class="scoreboard"></div>
             </div>
 
-            <!-- ✅ 힌트 박스: 5문제마다 갱신, 평소엔 숨김 -->
-            <div id="hint-box" class="hint-box hidden"></div>
-
-            <div id="chat-window" class="chat-window">
-                <div class="system-message">게임 방에 입장했습니다. 질문이나 정답을 입력해보세요!</div>
+            <!-- ✅ 신규: 대기실(설정) 패널 — 게임 시작 전에만 보임 -->
+            <div id="pre-game-panel" class="pre-game-panel hidden">
+                <div id="host-settings" class="hidden">
+                    <p class="panel-title">⚙️ 방장 설정 — 시작하기 전에 자유롭게 바꿀 수 있어요</p>
+                    <div class="input-group">
+                        <label for="edit-difficulty">난이도</label>
+                        <select id="edit-difficulty">
+                            <option value="easy">쉬움 (힌트 제공)</option>
+                            <option value="normal">보통 (짧은 설명)</option>
+                            <option value="hard">어려움 (단답형)</option>
+                            <option value="extreme">극악 (알쏭달쏭)</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="edit-category">정답 카테고리</label>
+                        <select id="edit-category">
+                            <option value="랜덤" selected>🎲 랜덤 (아무 카테고리)</option>
+                        </select>
+                    </div>
+                    <button id="start-game-btn" class="btn primary">🎮 게임 시작</button>
+                </div>
+                <div id="guest-waiting" class="hidden">
+                    <p class="panel-title">⏳ 방장이 설정을 정하는 중입니다...</p>
+                    <p class="waiting-detail">현재 설정 — 난이도: <strong id="waiting-difficulty">-</strong> / 카테고리: <strong id="waiting-category">-</strong></p>
+                </div>
             </div>
 
-            <div class="input-area">
-                <input type="text" id="question-input" placeholder="질문이나 정답을 입력하세요...">
-                <button id="send-btn" class="btn primary">전송</button>
-            </div>
+            <!-- 실제 게임 플레이 패널 -->
+            <div id="play-panel" class="hidden">
+                <div id="hint-box" class="hint-box hidden"></div>
 
-            <button id="restart-btn" class="btn secondary hidden" style="margin-top: 15px;">게임 다시하기</button>
+                <div id="chat-window" class="chat-window">
+                    <div class="system-message">게임이 시작되었습니다. 질문이나 정답을 입력해보세요!</div>
+                </div>
+
+                <div class="input-area">
+                    <input type="text" id="question-input" placeholder="질문이나 정답을 입력하세요...">
+                    <button id="send-btn" class="btn primary">전송</button>
+                </div>
+
+                <div class="post-game-actions hidden" id="post-game-actions">
+                    <button id="restart-btn" class="btn secondary">🔁 같은 설정으로 다시하기</button>
+                    <button id="back-to-settings-btn" class="btn ghost hidden">⚙️ 설정 변경 후 재시작</button>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script src="script.js?v=v4"></script>
+    <script src="script.js?v=v5"></script>
 </body>
 </html>
